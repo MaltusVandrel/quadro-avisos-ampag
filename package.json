@@ -1,0 +1,31 @@
+{
+  "name": "quadro-avisos",
+  "version": "1.0.0",
+  "description": "Sistema de cadastro de ocorrências para mapa em NestJS",
+  "private": true,
+  "scripts": {
+    "start": "nest start",
+    "start:dev": "nest start --watch",
+    "build": "tsc -p tsconfig.build.json",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.1.27",
+    "@nestjs/core": "^11.1.27",
+    "@nestjs/platform-express": "^11.1.27",
+    "@types/express": "^5.0.6",
+    "express-handlebars": "^9.0.1",
+    "reflect-metadata": "^0.2.0",
+    "rxjs": "^7.0.0"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.23",
+    "@nestjs/testing": "^11.1.27",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^20.14.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.3.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.5.4"
+  }
+}

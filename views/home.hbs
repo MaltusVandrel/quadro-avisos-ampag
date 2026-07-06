@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{title}}</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+    <link rel="stylesheet" href="/css/home.css" />
+  </head>
+  <body>
+    <div id="map"></div>
+
+    <div class="floating-actions">
+      <button class="floating-button" id="openFormButton" title="Nova ocorrência" aria-label="Nova ocorrência">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+      </button>
+      <button class="floating-button secondary" onclick="alert('Filtro em breve')" title="Filtrar" aria-label="Filtrar">
+        <i class="fa-solid fa-filter"></i>
+      </button>
+    </div>
+
+    <div class="selection-actions hidden" id="selectionActions">
+      <button class="selection-action-btn confirm" id="confirmSelectionButton" title="Confirmar" aria-label="Confirmar">
+        <i class="fa-solid fa-check"></i>
+      </button>
+      <button class="selection-action-btn cancel" id="cancelSelectionButton" title="Cancelar" aria-label="Cancelar">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+
+    <div class="selection-hint hidden" id="selectionHint">Confirme o ponto no centro do mapa.</div>
+    <div class="selection-coordinates hidden" id="selectionCoordinates">Lat: --, Lng: --</div>
+
+    <div class="settings-fab" id="settingsFab" title="Configurações da criticidade padrão">
+      <i class="fa-solid fa-sliders"></i>
+    </div>
+
+    <div class="settings-panel hidden" id="settingsPanel">
+      <div class="settings-panel-header">
+        <strong>Criticidade padrão</strong>
+        <button type="button" class="settings-close" id="closeSettingsPanel" aria-label="Fechar">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="settings-options">
+        <button type="button" class="settings-option relato" data-default-criticality="Relato">Relato</button>
+        <button type="button" class="settings-option transtorno" data-default-criticality="Transtorno">Transtorno</button>
+        <button type="button" class="settings-option risco" data-default-criticality="Risco">Risco</button>
+        <button type="button" class="settings-option perigo" data-default-criticality="Perigo">Perigo</button>
+      </div>
+    </div>
+
+    <div class="modal hidden" id="occurrenceModal">
+      <div class="card">
+        <h2>Nova ocorrência</h2>
+        <form id="occurrenceForm">
+          <label for="description">Descrição</label>
+          <textarea id="description" required></textarea>
+
+          <label>Criticidade</label>
+          <div class="criticality-picker" role="group" aria-label="Criticidade">
+            <button type="button" class="criticality-option relato is-active" data-criticality="Relato">
+              <i class="fa-solid fa-comment-dots"></i>
+              <span>Relato</span>
+            </button>
+            <button type="button" class="criticality-option transtorno" data-criticality="Transtorno">
+              <i class="fa-solid fa-bolt"></i>
+              <span>Transtorno</span>
+            </button>
+            <button type="button" class="criticality-option risco" data-criticality="Risco">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+              <span>Risco</span>
+            </button>
+            <button type="button" class="criticality-option perigo" data-criticality="Perigo">
+              <i class="fa-solid fa-skull-crossbones"></i>
+              <span>Perigo</span>
+            </button>
+          </div>
+          <input id="criticality" type="hidden" value="Relato" />
+
+          <div class="criticality-help" id="criticalityHelp">
+            <h3 id="criticalityHelpTitle">Relato</h3>
+            <p id="criticalityHelpText">Registro inicial de um acontecimento sem risco imediato.</p>
+          </div>
+
+          <label for="locationLabel">Local</label>
+          <input id="locationLabel" placeholder="Ex.: Praça Central" />
+
+          <label for="occurredAt">Data e hora da ocorrência</label>
+          <input id="occurredAt" type="datetime-local" />
+
+          <div class="checkbox-row">
+            <input id="boOpened" type="checkbox" />
+            <label for="boOpened">BO aberto</label>
+          </div>
+
+          <div id="boFieldContainer" class="hidden" style="display:none;">
+            <label for="boNumberOrProtocol">Número do BO / Protocolo</label>
+            <input id="boNumberOrProtocol" placeholder="Ex.: BO-12345" />
+          </div>
+
+          <label for="photos">Fotos</label>
+          <input id="photos" type="text" placeholder="Ex.: foto1.jpg, foto2.jpg" />
+
+          <div class="hint" id="formHint">Toque em “Nova ocorrência” para escolher o ponto no centro do mapa. A localização será salva automaticamente.</div>
+
+          <div class="actions">
+            <button type="button" class="btn secondary" id="cancelButton">Cancelar</button>
+            <button type="submit" class="btn primary">Salvar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script src="/js/home.js"></script>
+  </body>
+</html>
