@@ -815,19 +815,30 @@ async function handleAuthSubmit(event) {
       anonId: getAnonymousProfile()?.id,
     };
 
-    const result = await api('/auth/register', { method: 'POST', body: JSON.stringify(body) });
-    setSession({ token: result.token, citizen: result.citizen });
+    try {
+      const result = await api('/auth/register', { method: 'POST', body: JSON.stringify(body) });
+      setSession({ token: result.token, citizen: result.citizen });
+    } catch (error) {
+      alert(error.message || 'Erro ao criar conta. Tente novamente.');
+      return;
+    }
   } else {
-    const result = await api('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ cpf, password }),
-    });
-    setSession({ token: result.token, citizen: result.citizen });
+    try {
+      const result = await api('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ cpf, password }),
+      });
+      setSession({ token: result.token, citizen: result.citizen });
+    } catch (error) {
+      alert('Credenciais incorretas ou usuário inexistente.');
+      return;
+    }
   }
 
   closeModalById('authModal');
   renderSettingsMenu();
   document.getElementById('authForm').reset();
+  loadVisibleIncidents();
 }
 
 async function openProfileModal() {
@@ -862,6 +873,7 @@ function handleLogout() {
   clearSession();
   closeModalById('confirmLogoutModal');
   renderSettingsMenu();
+  loadVisibleIncidents();
 }
 
 function openCriticalityModal() {
