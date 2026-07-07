@@ -19,13 +19,17 @@ const PUBLIC_PATHS = [
   /^\/$/,
   /^\/css\//,
   /^\/js\//,
+  /^\/img\//,
   /^\/assets\//,
   /^\/favicon\.ico$/,
+  /^\/manifest\.json$/,
+  /^\/sw\.js$/,
   /^\/auth\/login$/,
   /^\/auth\/register$/,
   /^\/citizens$/,
   /^\/incidents$/,
   /^\/incidents\/map$/,
+  /^\/incidents\/\d+\/deactivate$/,
 ];
 
 function isPublicPath(req: AuthenticatedRequest): boolean {

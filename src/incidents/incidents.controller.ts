@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Param,
   Patch,
@@ -36,6 +37,7 @@ export class IncidentsController {
     @Query('west') west: string,
     @Query('anonId') anonId?: string,
     @CurrentUser('sub') citizenId?: number,
+    @CurrentUser('role') role?: string,
   ) {
     const filters: MapFilters = {
       north: Number(north),
@@ -44,6 +46,7 @@ export class IncidentsController {
       west: Number(west),
       anonId,
       citizenId,
+      isAdmin: role === 'admin',
     };
 
     return this.incidentsService.findForMap(filters);
@@ -57,5 +60,31 @@ export class IncidentsController {
   @Patch(':id')
   async update(@Param('id') id: string, @Body() body: Partial<Incident>) {
     return this.incidentsService.update(Number(id), body);
+  }
+
+  @Patch(':id/approve')
+  @UseGuards(AuthGuard)
+  async approve(
+    @Param('id') id: string,
+    @CurrentUser('role') role?: string,
+  ) {
+    if (role !== 'admin') {
+      throw new ForbiddenException('Apenas administradores podem aprovar ocorrências');
+    }
+    return this.incidentsService.approve(Number(id));
+  }
+
+  @Patch(':id/deactivate')
+  async deactivate(
+    @Param('id') id: string,
+    @Body() body: { anonId?: string },
+    @CurrentUser('sub') citizenId?: number,
+    @CurrentUser('role') role?: string,
+  ) {
+    return this.incidentsService.deactivate(Number(id), {
+      citizenId,
+      anonId: body.anonId,
+      isAdmin: role === 'admin',
+    });
   }
 }

@@ -456,16 +456,31 @@ function confirmSelectionMode() {
 }
 
 function renderIncidentMarker(item) {
+  const color = getMarkerColor(item.criticality);
+  const isReviewed = item.reviewed;
+
   const markerContent = (() => {
     const el = document.createElement('div');
-    el.style.width = '16px';
-    el.style.height = '16px';
+    el.style.width = '22px';
+    el.style.height = '22px';
     el.style.borderRadius = '50%';
-    el.style.background = getMarkerColor(item.criticality);
+    el.style.background = color;
     el.style.border = '2px solid white';
     el.style.boxShadow = '0 2px 6px rgba(0,0,0,0.3)';
     el.style.cursor = 'pointer';
     el.style.pointerEvents = 'auto';
+    el.style.display = 'flex';
+    el.style.alignItems = 'center';
+    el.style.justifyContent = 'center';
+
+    if (!isReviewed) {
+      const icon = document.createElement('i');
+      icon.className = 'fa-solid fa-hourglass';
+      icon.style.color = 'white';
+      icon.style.fontSize = '10px';
+      el.appendChild(icon);
+    }
+
     return el;
   })();
 
@@ -487,6 +502,28 @@ function renderIncidentMarker(item) {
 
 let currentViewFiles = [];
 let currentViewIndex = 0;
+let currentViewIncidentId = null;
+
+function isAdmin() {
+  const session = getSession();
+  return !!(session?.citizen?.role === 'admin');
+}
+
+function isIncidentOwner(incident) {
+  const session = getSession();
+  if (session?.citizen?.id && incident.citizenId === session.citizen.id) {
+    return true;
+  }
+  const anonymousProfile = getAnonymousProfile();
+  if (anonymousProfile?.id && incident.anonId === anonymousProfile.id) {
+    return true;
+  }
+  return false;
+}
+
+function canDeactivate(incident) {
+  return isAdmin() || (isIncidentOwner(incident) && !incident.reviewed);
+}
 
 function formatIncidentDate(value) {
   if (!value) return '';
@@ -534,6 +571,10 @@ async function openIncidentView(incident) {
   const subtitle = document.getElementById('viewSubtitle');
   const description = document.getElementById('viewDescription');
   const card = document.getElementById('incidentViewCard');
+  const adminActions = document.getElementById('viewAdminActions');
+  const approveButton = document.getElementById('viewApproveButton');
+
+  currentViewIncidentId = incident.id;
 
   if (title) title.textContent = incident.title || 'Ocorrência';
   if (subtitle) {
@@ -546,6 +587,13 @@ async function openIncidentView(incident) {
   }
   if (card) {
     card.style.backgroundColor = getCriticalityColor(incident.criticality);
+  }
+
+  if (adminActions) {
+    adminActions.classList.toggle('hidden', !canDeactivate(incident));
+  }
+  if (approveButton) {
+    approveButton.classList.toggle('hidden', !isAdmin() || incident.reviewed);
   }
 
   currentViewFiles = [];
@@ -567,8 +615,135 @@ function closeIncidentView() {
   closeModalById('incidentViewModal');
   currentViewFiles = [];
   currentViewIndex = 0;
+  currentViewIncidentId = null;
   const img = document.getElementById('viewImage');
   if (img) img.src = '';
+}
+
+let viewerScale = 1;
+let viewerTranslateX = 0;
+let viewerTranslateY = 0;
+let viewerStartScale = 1;
+let viewerStartDistance = 0;
+let viewerStartX = 0;
+let viewerStartY = 0;
+let viewerStartTranslateX = 0;
+let viewerStartTranslateY = 0;
+let viewerLastTap = 0;
+
+function updateImageViewerTransform() {
+  const image = document.getElementById('imageViewerImage');
+  if (!image) return;
+  image.style.transform = `translate(${viewerTranslateX}px, ${viewerTranslateY}px) scale(${viewerScale})`;
+}
+
+function resetImageViewer() {
+  viewerScale = 1;
+  viewerTranslateX = 0;
+  viewerTranslateY = 0;
+  updateImageViewerTransform();
+}
+
+function openImageViewer(src) {
+  const image = document.getElementById('imageViewerImage');
+  if (!image) return;
+  image.src = src;
+  resetImageViewer();
+  openModalById('imageViewerModal');
+}
+
+function closeImageViewer() {
+  closeModalById('imageViewerModal');
+  const image = document.getElementById('imageViewerImage');
+  if (image) image.src = '';
+}
+
+function getTouchDistance(touch1, touch2) {
+  const dx = touch1.clientX - touch2.clientX;
+  const dy = touch1.clientY - touch2.clientY;
+  return Math.hypot(dx, dy);
+}
+
+function handleViewerTouchStart(event) {
+  if (event.touches.length === 2) {
+    viewerStartDistance = getTouchDistance(event.touches[0], event.touches[1]);
+    viewerStartScale = viewerScale;
+  } else if (event.touches.length === 1) {
+    viewerStartX = event.touches[0].clientX;
+    viewerStartY = event.touches[0].clientY;
+    viewerStartTranslateX = viewerTranslateX;
+    viewerStartTranslateY = viewerTranslateY;
+
+    const now = Date.now();
+    if (now - viewerLastTap < 300) {
+      resetImageViewer();
+    }
+    viewerLastTap = now;
+  }
+}
+
+function handleViewerTouchMove(event) {
+  event.preventDefault();
+
+  if (event.touches.length === 2) {
+    const distance = getTouchDistance(event.touches[0], event.touches[1]);
+    if (viewerStartDistance > 0) {
+      let newScale = viewerStartScale * (distance / viewerStartDistance);
+      newScale = Math.min(Math.max(newScale, 1), 5);
+      viewerScale = newScale;
+      updateImageViewerTransform();
+    }
+  } else if (event.touches.length === 1) {
+    const dx = event.touches[0].clientX - viewerStartX;
+    const dy = event.touches[0].clientY - viewerStartY;
+    viewerTranslateX = viewerStartTranslateX + dx;
+    viewerTranslateY = viewerStartTranslateY + dy;
+    updateImageViewerTransform();
+  }
+}
+
+function handleViewerTouchEnd() {
+  viewerStartDistance = 0;
+}
+
+async function approveIncident() {
+  if (!currentViewIncidentId) return;
+
+  try {
+    await api(`/incidents/${currentViewIncidentId}/approve`, { method: 'PATCH' });
+    closeIncidentView();
+    await loadVisibleIncidents();
+  } catch (error) {
+    console.error('Failed to approve incident:', error);
+    alert(error.message || 'Erro ao aprovar ocorrência.');
+  }
+}
+
+async function deactivateIncident() {
+  if (!currentViewIncidentId) return;
+
+  if (!confirm('Tem certeza que deseja remover esta ocorrência?')) {
+    return;
+  }
+
+  const session = getSession();
+  const anonymousProfile = getAnonymousProfile();
+  const body = {
+    citizenId: session?.citizen?.id,
+    anonId: anonymousProfile ? anonymousProfile.id : undefined,
+  };
+
+  try {
+    await api(`/incidents/${currentViewIncidentId}/deactivate`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+    closeIncidentView();
+    await loadVisibleIncidents();
+  } catch (error) {
+    console.error('Failed to deactivate incident:', error);
+    alert(error.message || 'Erro ao remover ocorrência.');
+  }
 }
 
 function refreshClusters() {
@@ -1274,9 +1449,31 @@ async function initMap() {
   document.getElementById('viewCloseButton')?.addEventListener('click', closeIncidentView);
   document.getElementById('viewPrevButton')?.addEventListener('click', () => showViewImage(currentViewIndex - 1));
   document.getElementById('viewNextButton')?.addEventListener('click', () => showViewImage(currentViewIndex + 1));
+  document.getElementById('viewApproveButton')?.addEventListener('click', approveIncident);
+  document.getElementById('viewDeactivateButton')?.addEventListener('click', deactivateIncident);
   document.getElementById('incidentViewModal')?.addEventListener('click', (event) => {
     if (event.target.id === 'incidentViewModal') {
       closeIncidentView();
+    }
+  });
+
+  document.getElementById('viewImage')?.addEventListener('click', () => {
+    const src = document.getElementById('viewImage')?.src;
+    if (src) openImageViewer(src);
+  });
+
+  const imageViewerContainer = document.getElementById('imageViewerContainer');
+  if (imageViewerContainer) {
+    imageViewerContainer.addEventListener('touchstart', handleViewerTouchStart, { passive: false });
+    imageViewerContainer.addEventListener('touchmove', handleViewerTouchMove, { passive: false });
+    imageViewerContainer.addEventListener('touchend', handleViewerTouchEnd);
+    imageViewerContainer.addEventListener('touchcancel', handleViewerTouchEnd);
+  }
+
+  document.getElementById('imageViewerCloseButton')?.addEventListener('click', closeImageViewer);
+  document.getElementById('imageViewerModal')?.addEventListener('click', (event) => {
+    if (event.target.id === 'imageViewerModal') {
+      closeImageViewer();
     }
   });
 
@@ -1377,6 +1574,18 @@ async function initMap() {
 
 initializeAnonymousProfile();
 
+function registerServiceWorker() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js')
+      .then((registration) => {
+        console.log('[sw] registrado:', registration.scope);
+      })
+      .catch((error) => {
+        console.error('[sw] falha ao registrar:', error);
+      });
+  }
+}
+
 function loadGoogleMaps() {
   const mapContainer = document.getElementById('map');
   if (!mapContainer) {
@@ -1398,7 +1607,11 @@ function loadGoogleMaps() {
 }
 
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', loadGoogleMaps);
+  document.addEventListener('DOMContentLoaded', () => {
+    registerServiceWorker();
+    loadGoogleMaps();
+  });
 } else {
+  registerServiceWorker();
   loadGoogleMaps();
 }

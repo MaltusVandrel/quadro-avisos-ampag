@@ -4,7 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="google-maps-api-key" content="{{googleMapsApiKey}}" />
+    <meta name="theme-color" content="#111827" />
     <title>{{title}}</title>
+    <link rel="icon" type="image/jpeg" href="/img/icon.jpeg" />
+    <link rel="apple-touch-icon" href="/img/icon.jpeg" />
+    <link rel="manifest" href="/manifest.json" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
     <link rel="stylesheet" href="/css/home.css" />
   </head>
@@ -253,9 +257,22 @@
           <div class="carousel-counter" id="viewCounter"></div>
         </div>
         <div class="incident-view-description" id="viewDescription"></div>
+        <div class="incident-view-actions hidden" id="viewAdminActions">
+          <button type="button" class="btn primary" id="viewApproveButton">Aprovar</button>
+          <button type="button" class="btn secondary" id="viewDeactivateButton">Remover</button>
+        </div>
       </div>
     </div>
 
-    <script src="/js/home.js?v=10"></script>
+    <div class="modal hidden" id="imageViewerModal">
+      <div class="image-viewer-container" id="imageViewerContainer">
+        <img id="imageViewerImage" src="" alt="Foto em tela cheia" />
+      </div>
+      <button type="button" class="image-viewer-close" id="imageViewerCloseButton" aria-label="Fechar">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+
+    <script src="/js/home.js?v=13"></script>
   </body>
 </html>

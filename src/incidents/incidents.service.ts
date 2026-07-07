@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { and, eq, gte, inArray, lte, or } from 'drizzle-orm';
 import { db } from '../database/connection';
 import { incidents, uploadcareFiles } from '../database/schema';
@@ -17,6 +17,7 @@ export interface MapFilters {
   west: number;
   citizenId?: number;
   anonId?: string;
+  isAdmin?: boolean;
 }
 
 @Injectable()
@@ -81,32 +82,36 @@ export class IncidentsService {
   async findForMap(filters: MapFilters): Promise<Incident[]> {
     const fifteenDaysAgo = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000);
 
-    const permissionFilter = filters.citizenId
-      ? or(
-          eq(incidents.reviewed, true),
-          eq(incidents.citizenId, filters.citizenId),
-          filters.anonId ? eq(incidents.anonId, filters.anonId) : undefined,
-        )
-      : or(
-          eq(incidents.reviewed, true),
-          filters.anonId ? eq(incidents.anonId, filters.anonId) : undefined,
-        );
-    
+    const permissionFilter = filters.isAdmin
+      ? undefined
+      : filters.citizenId
+        ? or(
+            eq(incidents.reviewed, true),
+            eq(incidents.citizenId, filters.citizenId),
+            filters.anonId ? eq(incidents.anonId, filters.anonId) : undefined,
+          )
+        : or(
+            eq(incidents.reviewed, true),
+            filters.anonId ? eq(incidents.anonId, filters.anonId) : undefined,
+          );
+
+    const conditions = [
+      gte(incidents.occurredAt, fifteenDaysAgo),
+      eq(incidents.active, true),
+      gte(incidents.latitude, filters.south),
+      lte(incidents.latitude, filters.north),
+      gte(incidents.longitude, filters.west),
+      lte(incidents.longitude, filters.east),
+    ];
+
+    if (permissionFilter) {
+      conditions.push(permissionFilter);
+    }
+
     const rows = await db
       .select()
       .from(incidents)
-      .where(
-        and(
-          gte(incidents.occurredAt, fifteenDaysAgo),
-           
-          gte(incidents.latitude, filters.south),
-          lte(incidents.latitude, filters.north),
-          gte(incidents.longitude, filters.west),
-          lte(incidents.longitude, filters.east),
-           
-          permissionFilter,
-        ),
-      );
+      .where(and(...conditions));
 
     return rows.map((row) => this.mapToEntity(row));
   }
@@ -146,6 +151,53 @@ export class IncidentsService {
     const [result] = await db
       .update(incidents)
       .set(values)
+      .where(eq(incidents.id, id))
+      .returning();
+
+    return this.mapToEntity(result);
+  }
+
+  async approve(id: number): Promise<Incident> {
+    const existing = await this.findOne(id);
+
+    if (!existing) {
+      throw new NotFoundException('Ocorrência não encontrada');
+    }
+
+    const [result] = await db
+      .update(incidents)
+      .set({ reviewed: true, updatedAt: new Date() })
+      .where(eq(incidents.id, id))
+      .returning();
+
+    return this.mapToEntity(result);
+  }
+
+  async deactivate(
+    id: number,
+    options: { citizenId?: number; anonId?: string; isAdmin?: boolean } = {},
+  ): Promise<Incident> {
+    const existing = await this.findOne(id);
+
+    if (!existing) {
+      throw new NotFoundException('Ocorrência não encontrada');
+    }
+
+    if (options.isAdmin) {
+      // Admin pode remover qualquer ocorrência.
+    } else if (!existing.reviewed) {
+      const isOwnerByCitizen = options.citizenId != null && existing.citizenId === options.citizenId;
+      const isOwnerByAnon = options.anonId != null && existing.anonId === options.anonId;
+      if (!isOwnerByCitizen && !isOwnerByAnon) {
+        throw new ForbiddenException('Você não tem permissão para remover esta ocorrência');
+      }
+    } else {
+      throw new ForbiddenException('Ocorrências aprovadas só podem ser removidas por um administrador');
+    }
+
+    const [result] = await db
+      .update(incidents)
+      .set({ active: false, updatedAt: new Date() })
       .where(eq(incidents.id, id))
       .returning();
 

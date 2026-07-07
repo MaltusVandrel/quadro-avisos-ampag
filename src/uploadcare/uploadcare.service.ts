@@ -41,8 +41,7 @@ export class UploadcareService {
       throw new BadRequestException('Arquivo não fornecido');
     }
 
-    console.log(`[uploadcare] receiving file: ${file.originalname}, type: ${file.mimetype}, size: ${file.buffer.length}`);
-
+     
     const formData = new FormData();
     formData.append('UPLOADCARE_PUB_KEY', this.publicKey);
     formData.append('UPLOADCARE_STORE', '1');
@@ -59,18 +58,16 @@ export class UploadcareService {
     });
     const duration = Date.now() - startedAt;
 
-    console.log(`[uploadcare] uploadcare response: ${response.status}, duration: ${duration}ms`);
-
+    
     if (!response.ok) {
       const text = await response.text().catch(() => 'Uploadcare upload failed');
-      console.error(`[uploadcare] upload failed: ${text}`);
+       
       throw new BadRequestException(`Falha no upload: ${text}`);
     }
 
     const result = (await response.json()) as Record<string, string>;
     const fileId = Object.values(result)[0];
-    console.log(`[uploadcare] fileId: ${fileId}`);
-
+    
     if (!fileId) {
       throw new BadRequestException('Resposta inválida do Uploadcare');
     }
