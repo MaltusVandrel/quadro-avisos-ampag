@@ -192,7 +192,7 @@
 
     <div class="modal hidden" id="incidentModal">
       <div class="card">
-        <h2>Nova ocorrência</h2>
+        <h2 id="incidentModalTitle">Nova ocorrência</h2>
         <form id="incidentForm">
           <label for="title">Título</label>
           <input id="title" type="text" placeholder="Ex.: Poste danificado" />
@@ -245,6 +245,8 @@
 
           <div class="hint" id="formHint">Toque em “Nova ocorrência” para escolher o ponto no centro do mapa. A localização será salva automaticamente.</div>
 
+          <button type="button" class="btn secondary hidden" id="changeLocationButton">Alterar localização</button>
+
           <div class="actions">
             <button type="button" class="btn secondary" id="cancelButton">Cancelar</button>
             <button type="submit" class="btn primary">Salvar</button>
@@ -275,6 +277,7 @@
         <div class="incident-view-description" id="viewDescription"></div>
         <div class="incident-view-actions hidden" id="viewAdminActions">
           <button type="button" class="btn primary" id="viewApproveButton">Aprovar</button>
+          <button type="button" class="btn secondary" id="viewEditButton">Editar</button>
           <button type="button" class="btn secondary" id="viewDeactivateButton">Remover</button>
         </div>
       </div>
@@ -289,6 +292,6 @@
       </button>
     </div>
 
-    <script src="/js/home.js?v=16"></script>
+    <script src="/js/home.js?v=18"></script>
   </body>
 </html>

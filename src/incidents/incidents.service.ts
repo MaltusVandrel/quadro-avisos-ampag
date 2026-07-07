@@ -10,6 +10,13 @@ export interface CreateIncidentInput extends Omit<Incident, 'id' | 'createdAt' |
   fileIds?: string[];
 }
 
+export interface UpdateIncidentInput extends Partial<Incident> {
+  fileIds?: string[];
+  citizenId?: number;
+  anonId?: string;
+  isAdmin?: boolean;
+}
+
 export interface MapFilters {
   north: number;
   south: number;
@@ -121,23 +128,53 @@ export class IncidentsService {
     return row ? this.mapToEntity(row) : undefined;
   }
 
-  async update(id: number, data: Partial<Incident>): Promise<Incident> {
+  async update(id: number, data: UpdateIncidentInput): Promise<Incident> {
     const existing = await this.findOne(id);
 
     if (!existing) {
       throw new NotFoundException('Ocorrência não encontrada');
     }
 
+    if (existing.reviewed) {
+      throw new ForbiddenException('Ocorrências aprovadas não podem ser editadas');
+    }
+
+    const isOwnerByCitizen = data.citizenId != null && existing.citizenId === data.citizenId;
+    const isOwnerByAnon = data.anonId != null && existing.anonId === data.anonId;
+
+    if (!data.isAdmin && !isOwnerByCitizen && !isOwnerByAnon) {
+      throw new ForbiddenException('Você não tem permissão para editar esta ocorrência');
+    }
+
     const values: Partial<typeof incidents.$inferInsert> = {
       updatedAt: new Date(),
     };
 
-    if (data.title !== undefined && !existing.title) {
-      values.title = data.title;
+    if (data.title !== undefined) {
+      values.title = data.title || null;
     }
 
-    if (data.description !== undefined && !existing.description) {
-      values.description = data.description;
+    if (data.description !== undefined) {
+      values.description = data.description || null;
+    }
+
+    if (data.latitude !== undefined) {
+      values.latitude = data.latitude;
+    }
+
+    if (data.longitude !== undefined) {
+      values.longitude = data.longitude;
+    }
+
+    if (data.criticality !== undefined) {
+      if (!isCriticality(data.criticality)) {
+        throw new BadRequestException('Criticidade inválida');
+      }
+      values.criticality = data.criticality;
+    }
+
+    if (data.occurredAt !== undefined) {
+      values.occurredAt = new Date(data.occurredAt);
     }
 
     if (data.boOpened !== undefined) {
@@ -145,7 +182,7 @@ export class IncidentsService {
     }
 
     if (data.boNumberOrProtocol !== undefined) {
-      values.boNumberOrProtocol = data.boNumberOrProtocol;
+      values.boNumberOrProtocol = data.boNumberOrProtocol || null;
     }
 
     const [result] = await db
@@ -154,7 +191,47 @@ export class IncidentsService {
       .where(eq(incidents.id, id))
       .returning();
 
+    if (data.fileIds !== undefined) {
+      await this.syncIncidentFiles(id, data.fileIds);
+    }
+
     return this.mapToEntity(result);
+  }
+
+  private async syncIncidentFiles(id: number, fileIds: string[]): Promise<void> {
+    if (fileIds.length === 0) {
+      throw new BadRequestException('É necessário manter pelo menos uma foto');
+    }
+
+    const currentFiles = await db
+      .select()
+      .from(uploadcareFiles)
+      .where(eq(uploadcareFiles.incidentId, id));
+
+    const removedFileIds = currentFiles
+      .filter((file) => !fileIds.includes(file.fileId))
+      .map((file) => file.fileId);
+
+    if (removedFileIds.length > 0) {
+      await db
+        .update(uploadcareFiles)
+        .set({ incidentId: null })
+        .where(inArray(uploadcareFiles.fileId, removedFileIds));
+    }
+
+    await db
+      .update(uploadcareFiles)
+      .set({ incidentId: id })
+      .where(inArray(uploadcareFiles.fileId, fileIds));
+
+    const remainingFiles = await db
+      .select()
+      .from(uploadcareFiles)
+      .where(eq(uploadcareFiles.incidentId, id));
+
+    if (remainingFiles.length === 0) {
+      throw new BadRequestException('É necessário manter pelo menos uma foto válida');
+    }
   }
 
   async approve(id: number): Promise<Incident> {

@@ -9,7 +9,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { IncidentsService, MapFilters, CreateIncidentInput } from './incidents.service';
+import { IncidentsService, MapFilters, CreateIncidentInput, UpdateIncidentInput } from './incidents.service';
 import { Incident } from './incident.entity';
 import { AuthGuard } from '../common/guards/auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -58,8 +58,17 @@ export class IncidentsController {
   }
 
   @Patch(':id')
-  async update(@Param('id') id: string, @Body() body: Partial<Incident>) {
-    return this.incidentsService.update(Number(id), body);
+  async update(
+    @Param('id') id: string,
+    @Body() body: UpdateIncidentInput,
+    @CurrentUser('sub') citizenId?: number,
+    @CurrentUser('role') role?: string,
+  ) {
+    return this.incidentsService.update(Number(id), {
+      ...body,
+      citizenId,
+      isAdmin: role === 'admin',
+    });
   }
 
   @Patch(':id/approve')

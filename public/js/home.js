@@ -12,6 +12,7 @@ let advancedMarkers = [];
 let AdvancedMarkerElementCtor = null;
 let selectionModeActive = false;
 let previousSelection = null;
+let editingIncidentId = null;
 
 function getDefaultCriticality() {
   try {
@@ -58,7 +59,10 @@ async function api(path, options = {}) {
     headers.Authorization = `Bearer ${session.token}`;
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const url = `${API_BASE_URL}${path}`;
+  console.log('[api]', options.method || 'GET', url);
+
+  const response = await fetch(url, {
     ...options,
     headers,
   });
@@ -361,6 +365,7 @@ function startSelectionMode() {
 
   selectionModeActive = true;
   previousSelection = selectedPosition ? { ...selectedPosition } : null;
+
   const center = map.getCenter();
   const position = { lat: center.lat(), lng: center.lng() };
 
@@ -416,6 +421,10 @@ function cancelSelectionMode() {
   } else {
     selectedPosition = null;
   }
+
+  if (editingIncidentId) {
+    openModal(true);
+  }
 }
 
 function confirmSelectionMode() {
@@ -452,7 +461,7 @@ function confirmSelectionMode() {
   }
 
   setSelectedPosition(position);
-  openModal();
+  openModal(!!editingIncidentId);
 }
 
 function renderIncidentMarker(item) {
@@ -525,6 +534,10 @@ function canDeactivate(incident) {
   return isAdmin() || (isIncidentOwner(incident) && !incident.reviewed);
 }
 
+function canEdit(incident) {
+  return isAdmin() || (isIncidentOwner(incident) && !incident.reviewed);
+}
+
 function formatIncidentDate(value) {
   if (!value) return '';
   const date = new Date(value);
@@ -573,6 +586,7 @@ async function openIncidentView(incident) {
   const card = document.getElementById('incidentViewCard');
   const adminActions = document.getElementById('viewAdminActions');
   const approveButton = document.getElementById('viewApproveButton');
+  const editButton = document.getElementById('viewEditButton');
 
   currentViewIncidentId = incident.id;
 
@@ -594,6 +608,9 @@ async function openIncidentView(incident) {
   }
   if (approveButton) {
     approveButton.classList.toggle('hidden', !isAdmin() || incident.reviewed);
+  }
+  if (editButton) {
+    editButton.classList.toggle('hidden', !canEdit(incident));
   }
 
   currentViewFiles = [];
@@ -618,6 +635,46 @@ function closeIncidentView() {
   currentViewIncidentId = null;
   const img = document.getElementById('viewImage');
   if (img) img.src = '';
+}
+
+async function openIncidentEdit(incident) {
+  editingIncidentId = incident.id;
+  selectedPosition = { lat: incident.latitude, lng: incident.longitude };
+
+  document.getElementById('title').value = incident.title || '';
+  document.getElementById('description').value = incident.description || '';
+  updateCriticalitySelection(incident.criticality || 'Relato');
+
+  const occurredAtInput = document.getElementById('occurredAt');
+  if (incident.occurredAt) {
+    const date = new Date(incident.occurredAt);
+    occurredAtInput.value = date.toISOString().slice(0, 16);
+  } else {
+    occurredAtInput.value = new Date().toISOString().slice(0, 16);
+  }
+
+  const boOpenedInput = document.getElementById('boOpened');
+  boOpenedInput.checked = !!incident.boOpened;
+  toggleBoField();
+  document.getElementById('boNumberOrProtocol').value = incident.boNumberOrProtocol || '';
+
+  uploadedFiles = [];
+  renderPhotoPreview();
+
+  closeIncidentView();
+  openModal(true);
+
+  try {
+    const files = await api(`/uploads?incidentId=${incident.id}`);
+    uploadedFiles = (Array.isArray(files) ? files : []).map((file) => ({
+      fileId: file.fileId,
+      fileUrl: file.fileUrl,
+      previewUrl: file.fileUrl,
+    }));
+    renderPhotoPreview();
+  } catch (error) {
+    console.error('Failed to load incident photos for editing:', error);
+  }
 }
 
 let viewerScale = 1;
@@ -821,10 +878,28 @@ async function loadVisibleIncidents() {
   }
 }
 
-function openModal() {
+function openModal(isEdit = false) {
   document.getElementById('incidentModal').classList.remove('hidden');
-  document.getElementById('occurredAt').value = new Date().toISOString().slice(0, 16);
-  document.getElementById('formHint').textContent = 'A localização será salva automaticamente.';
+
+  const title = document.getElementById('incidentModalTitle');
+  const changeLocationButton = document.getElementById('changeLocationButton');
+  const hint = document.getElementById('formHint');
+
+  if (title) {
+    title.textContent = isEdit ? 'Editar ocorrência' : 'Nova ocorrência';
+  }
+  if (changeLocationButton) {
+    changeLocationButton.classList.toggle('hidden', !isEdit);
+  }
+  if (hint) {
+    hint.textContent = isEdit
+      ? 'Ajuste os dados da ocorrência. Toque em "Alterar localização" para reposicionar o ponto no mapa.'
+      : 'A localização será salva automaticamente.';
+  }
+
+  if (!isEdit) {
+    document.getElementById('occurredAt').value = new Date().toISOString().slice(0, 16);
+  }
 }
 
 function closeModal() {
@@ -836,7 +911,19 @@ function closeModal() {
   renderPhotoPreview();
   const status = document.getElementById('photoUploadStatus');
   if (status) status.textContent = '';
-  document.getElementById('formHint').textContent = 'Toque em “Nova ocorrência” para escolher o ponto no centro do mapa. A localização será salva automaticamente.';
+
+  const title = document.getElementById('incidentModalTitle');
+  if (title) title.textContent = 'Nova ocorrência';
+
+  const changeLocationButton = document.getElementById('changeLocationButton');
+  if (changeLocationButton) changeLocationButton.classList.add('hidden');
+
+  const hint = document.getElementById('formHint');
+  if (hint) {
+    hint.textContent = 'Toque em “Nova ocorrência” para escolher o ponto no centro do mapa. A localização será salva automaticamente.';
+  }
+
+  editingIncidentId = null;
 }
 
 function toggleBoField() {
@@ -1030,10 +1117,12 @@ function updateAuthModalMode(mode) {
 
 async function handleAuthSubmit(event) {
   event.preventDefault();
+  console.log('[auth] submit triggered');
 
   const mode = document.getElementById('authForm').dataset.mode || 'login';
   const cpf = parseCpf(document.getElementById('authCpf').value);
   const password = document.getElementById('authPassword').value;
+  console.log('[auth] mode:', mode, 'cpf:', cpf);
 
   if (mode === 'register') {
     const confirmPassword = document.getElementById('authConfirmPassword').value;
@@ -1101,12 +1190,15 @@ async function handleAuthSubmit(event) {
     }
   } else {
     try {
+      console.log('[auth] calling /auth/login');
       const result = await api('/auth/login', {
         method: 'POST',
         body: JSON.stringify({ cpf, password }),
       });
+      console.log('[auth] login success', result);
       setSession({ token: result.token, citizen: result.citizen });
     } catch (error) {
+      console.error('[auth] login error:', error);
       alert('Credenciais incorretas ou usuário inexistente.');
       return;
     }
@@ -1355,66 +1447,7 @@ async function handleCameraReport(file) {
   );
 }
 
-async function initMap() {
-  const mapContainer = document.getElementById('map');
-  if (!mapContainer) {
-    return;
-  }
-
-  const { Map } = await google.maps.importLibrary('maps');
-  const { AdvancedMarkerElement } = await google.maps.importLibrary('marker');
-  AdvancedMarkerElementCtor = AdvancedMarkerElement;
-
-  map = new Map(mapContainer, {
-    zoom: 14,
-    center: defaultCenter,
-    mapTypeControl: false,
-    streetViewControl: false,
-    fullscreenControl: false,
-    mapId: '3504c5feee954d98114f3a2d',
-  });
-
-  map.addListener('center_changed', () => {
-    if (!selectionModeActive || !map) {
-      return;
-    }
-
-    const center = map.getCenter();
-    const position = { lat: center.lat(), lng: center.lng() };
-    setSelectedPosition(position);
-  });
-
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const currentPosition = {
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-        };
-        map.setCenter(currentPosition);
-        setSelectedPosition(currentPosition);
-      },
-      () => {
-        setSelectedPosition(defaultCenter);
-      },
-    );
-  } else {
-    setSelectedPosition(defaultCenter);
-  }
-
-  loadVisibleIncidents();
-  updateCriticalitySelection(getDefaultCriticality());
-
-  map.addListener('idle', () => {
-    loadVisibleIncidents();
-  });
-
-  document.querySelectorAll('.criticality-option').forEach((button) => {
-    button.addEventListener('click', () => {
-      updateCriticalitySelection(button.dataset.criticality);
-    });
-  });
-
+function initAuthAndSettingsListeners() {
   const settingsFab = document.getElementById('settingsFab');
   const settingsPanel = document.getElementById('settingsPanel');
   const closeSettingsPanel = document.getElementById('closeSettingsPanel');
@@ -1485,6 +1518,67 @@ async function initMap() {
       button.classList.add('is-active');
     });
   });
+}
+
+async function initMap() {
+  const mapContainer = document.getElementById('map');
+  if (!mapContainer) {
+    return;
+  }
+
+  const { Map } = await google.maps.importLibrary('maps');
+  const { AdvancedMarkerElement } = await google.maps.importLibrary('marker');
+  AdvancedMarkerElementCtor = AdvancedMarkerElement;
+
+  map = new Map(mapContainer, {
+    zoom: 14,
+    center: defaultCenter,
+    mapTypeControl: false,
+    streetViewControl: false,
+    fullscreenControl: false,
+    mapId: '3504c5feee954d98114f3a2d',
+  });
+
+  map.addListener('center_changed', () => {
+    if (!selectionModeActive || !map) {
+      return;
+    }
+
+    const center = map.getCenter();
+    const position = { lat: center.lat(), lng: center.lng() };
+    setSelectedPosition(position);
+  });
+
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const currentPosition = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        };
+        map.setCenter(currentPosition);
+        setSelectedPosition(currentPosition);
+      },
+      () => {
+        setSelectedPosition(defaultCenter);
+      },
+    );
+  } else {
+    setSelectedPosition(defaultCenter);
+  }
+
+  loadVisibleIncidents();
+  updateCriticalitySelection(getDefaultCriticality());
+
+  map.addListener('idle', () => {
+    loadVisibleIncidents();
+  });
+
+  document.querySelectorAll('.criticality-option').forEach((button) => {
+    button.addEventListener('click', () => {
+      updateCriticalitySelection(button.dataset.criticality);
+    });
+  });
 
   document.querySelectorAll('.criticality-option').forEach((button) => {
     button.addEventListener('click', () => {
@@ -1497,6 +1591,12 @@ async function initMap() {
   document.getElementById('viewPrevButton')?.addEventListener('click', () => showViewImage(currentViewIndex - 1));
   document.getElementById('viewNextButton')?.addEventListener('click', () => showViewImage(currentViewIndex + 1));
   document.getElementById('viewApproveButton')?.addEventListener('click', approveIncident);
+  document.getElementById('viewEditButton')?.addEventListener('click', () => {
+    const incident = incidents.find((item) => item.id === currentViewIncidentId);
+    if (incident) {
+      openIncidentEdit(incident);
+    }
+  });
   document.getElementById('viewDeactivateButton')?.addEventListener('click', deactivateIncident);
   document.getElementById('incidentViewModal')?.addEventListener('click', (event) => {
     if (event.target.id === 'incidentViewModal') {
@@ -1540,6 +1640,12 @@ async function initMap() {
   document.getElementById('confirmSelectionButton').addEventListener('click', confirmSelectionMode);
   document.getElementById('cancelSelectionButton').addEventListener('click', cancelSelectionMode);
   document.getElementById('cancelButton').addEventListener('click', closeModal);
+  document.getElementById('changeLocationButton')?.addEventListener('click', () => {
+    if (selectedPosition && map) {
+      map.setCenter(selectedPosition);
+    }
+    startSelectionMode();
+  });
   document.getElementById('boOpened').addEventListener('change', toggleBoField);
   document.getElementById('photos')?.addEventListener('change', (event) => {
     const files = event.target.files;
@@ -1593,6 +1699,8 @@ async function initMap() {
 
     console.log('[incidentForm submit] selectedPosition:', selectedPosition, 'map center:', map.getCenter().toJSON());
 
+    const isEdit = editingIncidentId !== null;
+
     const incident = {
       title: document.getElementById('title').value.trim() || undefined,
       description: document.getElementById('description').value.trim() || undefined,
@@ -1600,15 +1708,31 @@ async function initMap() {
       latitude: selectedPosition.lat,
       longitude: selectedPosition.lng,
       criticality: document.getElementById('criticality').value,
-      citizenId: session?.citizen?.id,
-      anonId: anonymousProfile ? anonymousProfile.id : undefined,
       boOpened: document.getElementById('boOpened').checked,
       boNumberOrProtocol: document.getElementById('boNumberOrProtocol').value.trim() || undefined,
       occurredAt: document.getElementById('occurredAt').value || new Date().toISOString(),
     };
 
     try {
-      await api('/incidents', { method: 'POST', body: JSON.stringify(incident) });
+      if (isEdit) {
+        await api(`/incidents/${editingIncidentId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            ...incident,
+            citizenId: session?.citizen?.id,
+            anonId: anonymousProfile ? anonymousProfile.id : undefined,
+          }),
+        });
+      } else {
+        await api('/incidents', {
+          method: 'POST',
+          body: JSON.stringify({
+            ...incident,
+            citizenId: session?.citizen?.id,
+            anonId: anonymousProfile ? anonymousProfile.id : undefined,
+          }),
+        });
+      }
       await loadVisibleIncidents();
       closeModal();
     } catch (error) {
@@ -1655,10 +1779,12 @@ function loadGoogleMaps() {
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
+    initAuthAndSettingsListeners();
     registerServiceWorker();
     loadGoogleMaps();
   });
 } else {
+  initAuthAndSettingsListeners();
   registerServiceWorker();
   loadGoogleMaps();
 }

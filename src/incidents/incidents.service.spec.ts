@@ -1,7 +1,8 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { CitizensService } from '../citizens/citizens.service';
 import { Criticality } from '../common/lib/criticality';
 import { IncidentsService } from './incidents.service';
+import { db } from '../database/connection';
 
 jest.mock('../citizens/citizens.service', () => {
   return {
@@ -20,14 +21,31 @@ jest.mock('../citizens/citizens.service', () => {
 
 jest.mock('../database/connection', () => {
   let storedIncident: any = null;
+  let filesStore: any[] = [];
+
+  function isIncidentsTable(table: any) {
+    return table && (table.name === 'incidents' || table.reviewed !== undefined);
+  }
+
+  function isUploadcareFilesTable(table: any) {
+    return table && (table.name === 'uploadcare_files' || table.incidentId !== undefined);
+  }
 
   return {
     db: {
       select: jest.fn(() => ({
-        from: jest.fn(() => ({
-          where: jest.fn(() => ({
-            limit: jest.fn(() => Promise.resolve(storedIncident ? [storedIncident] : [])),
-          })),
+        from: jest.fn((table: any) => ({
+          where: jest.fn(() => {
+            if (isIncidentsTable(table)) {
+              return {
+                limit: jest.fn(() => Promise.resolve(storedIncident ? [storedIncident] : [])),
+              };
+            }
+            if (isUploadcareFilesTable(table)) {
+              return Promise.resolve(filesStore);
+            }
+            return Promise.resolve([]);
+          }),
         })),
       })),
       insert: jest.fn(() => ({
@@ -57,16 +75,28 @@ jest.mock('../database/connection', () => {
           };
         }),
       })),
-      update: jest.fn(() => ({
-        set: jest.fn((values: any) => {
-          storedIncident = { ...storedIncident, ...values };
-          return {
-            where: jest.fn(() => ({
-              returning: jest.fn(() => Promise.resolve([storedIncident])),
-            })),
-          };
-        }),
+      update: jest.fn((table: any) => ({
+        set: jest.fn((values: any) => ({
+          where: jest.fn(() => {
+            if (isIncidentsTable(table)) {
+              storedIncident = { ...storedIncident, ...values };
+              return {
+                returning: jest.fn(() => Promise.resolve([storedIncident])),
+              };
+            }
+            return {
+              returning: jest.fn(() => Promise.resolve([])),
+            };
+          }),
+        })),
       })),
+      __setFilesStore(store: any[]) {
+        filesStore = store;
+      },
+      __reset() {
+        storedIncident = null;
+        filesStore = [];
+      },
     },
   };
 });
@@ -78,6 +108,8 @@ describe('IncidentsService', () => {
   beforeEach(() => {
     citizensService = new CitizensService();
     service = new IncidentsService(citizensService);
+    (db as any).__reset();
+    (db as any).__setFilesStore([{ fileId: 'file-1', incidentId: 1, fileUrl: 'https://example.com/file-1.jpg' }]);
   });
 
   async function createCitizen(name: string) {
@@ -128,7 +160,7 @@ describe('IncidentsService', () => {
     expect(incident.reviewed).toBe(false);
   });
 
-  it('allows restricted updates after report', async () => {
+  it('allows full update before review by owner', async () => {
     const citizen = await createCitizen('Bruno');
 
     const created = await service.create(
@@ -148,11 +180,19 @@ describe('IncidentsService', () => {
       description: 'Descrição complementada',
       boOpened: true,
       boNumberOrProtocol: 'BO-123',
+      latitude: -20.5,
+      longitude: -40.5,
+      criticality: Criticality.RISCO,
+      citizenId: citizen.id,
+      anonId: citizen.anonId,
     });
 
-    expect(updated.description).toBe('Relato inicial');
+    expect(updated.description).toBe('Descrição complementada');
     expect(updated.boOpened).toBe(true);
     expect(updated.boNumberOrProtocol).toBe('BO-123');
+    expect(updated.latitude).toBe(-20.5);
+    expect(updated.longitude).toBe(-40.5);
+    expect(updated.criticality).toBe(Criticality.RISCO);
   });
 
   it('creates an incident with only minimal data', async () => {
@@ -193,13 +233,15 @@ describe('IncidentsService', () => {
     const updated = await service.update(created.id, {
       title: 'Título preenchido',
       description: 'Descrição preenchida',
+      citizenId: citizen.id,
+      anonId: citizen.anonId,
     });
 
     expect(updated.title).toBe('Título preenchido');
     expect(updated.description).toBe('Descrição preenchida');
   });
 
-  it('does not overwrite title or description when they already have values', async () => {
+  it('allows overwriting title and description during edit', async () => {
     const citizen = await createCitizen('Eduardo');
 
     const created = await service.create(
@@ -214,10 +256,90 @@ describe('IncidentsService', () => {
     const updated = await service.update(created.id, {
       title: 'Título novo',
       description: 'Descrição nova',
+      citizenId: citizen.id,
+      anonId: citizen.anonId,
     });
 
-    expect(updated.title).toBe('Título original');
-    expect(updated.description).toBe('Descrição original');
+    expect(updated.title).toBe('Título novo');
+    expect(updated.description).toBe('Descrição nova');
+  });
+
+  it('throws when editing an already reviewed incident', async () => {
+    const citizen = await createCitizen('Fernanda');
+
+    const created = await service.create(
+      buildIncidentData({
+        citizenId: citizen.id,
+        anonId: citizen.anonId,
+      }),
+    );
+
+    await service.approve(created.id);
+
+    await expect(
+      service.update(created.id, {
+        title: 'Novo título',
+        citizenId: citizen.id,
+        anonId: citizen.anonId,
+      }),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('throws when editing without permission', async () => {
+    const citizen = await createCitizen('Gabriel');
+
+    const created = await service.create(
+      buildIncidentData({
+        citizenId: citizen.id,
+        anonId: citizen.anonId,
+      }),
+    );
+
+    await expect(
+      service.update(created.id, {
+        title: 'Novo título',
+        citizenId: 999,
+        anonId: 'anon-intruso',
+      }),
+    ).rejects.toThrow(ForbiddenException);
+  });
+
+  it('throws when trying to remove all photos', async () => {
+    const citizen = await createCitizen('Helena');
+
+    const created = await service.create(
+      buildIncidentData({
+        citizenId: citizen.id,
+        anonId: citizen.anonId,
+      }),
+    );
+
+    await expect(
+      service.update(created.id, {
+        fileIds: [],
+        citizenId: citizen.id,
+        anonId: citizen.anonId,
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('accepts photo synchronization during edit', async () => {
+    const citizen = await createCitizen('Igor');
+
+    const created = await service.create(
+      buildIncidentData({
+        citizenId: citizen.id,
+        anonId: citizen.anonId,
+      }),
+    );
+
+    const updated = await service.update(created.id, {
+      fileIds: ['file-1', 'file-2'],
+      citizenId: citizen.id,
+      anonId: citizen.anonId,
+    });
+
+    expect(updated.id).toBe(created.id);
   });
 
   it('throws for unresolved citizen or invalid criticality', async () => {
