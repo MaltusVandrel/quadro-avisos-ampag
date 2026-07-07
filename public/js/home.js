@@ -1746,15 +1746,32 @@ async function initMap() {
 initializeAnonymousProfile();
 
 function registerServiceWorker() {
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js')
-      .then((registration) => {
-        console.log('[sw] registrado:', registration.scope);
-      })
-      .catch((error) => {
-        console.error('[sw] falha ao registrar:', error);
-      });
+  if (!('serviceWorker' in navigator)) {
+    return;
   }
+
+  navigator.serviceWorker.register('/sw.js')
+    .then((registration) => {
+      console.log('[sw] registrado:', registration.scope);
+
+      // Force a check for updates on every load.
+      registration.update();
+
+      registration.addEventListener('updatefound', () => {
+        const newWorker = registration.installing;
+        if (!newWorker) return;
+
+        newWorker.addEventListener('statechange', () => {
+          if (newWorker.state === 'activated') {
+            console.log('[sw] novo worker ativado, recarregando para aplicar');
+            window.location.reload();
+          }
+        });
+      });
+    })
+    .catch((error) => {
+      console.error('[sw] falha ao registrar:', error);
+    });
 }
 
 function loadGoogleMaps() {
