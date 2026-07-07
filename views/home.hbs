@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="google-maps-api-key" content="{{googleMapsApiKey}}" />
     <title>{{title}}</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
     <link rel="stylesheet" href="/css/home.css" />
@@ -19,6 +20,11 @@
       </button>
     </div>
 
+    <button class="floating-button camera hidden" id="cameraReportButton" title="Relato rápido com foto" aria-label="Relato rápido com foto">
+      <i class="fa-solid fa-camera"></i>
+    </button>
+    <input id="cameraInput" type="file" accept="image/*" capture="environment" class="hidden" />
+
     <div class="selection-actions hidden" id="selectionActions">
       <button class="selection-action-btn confirm" id="confirmSelectionButton" title="Confirmar" aria-label="Confirmar">
         <i class="fa-solid fa-check"></i>
@@ -31,49 +37,166 @@
     <div class="selection-hint hidden" id="selectionHint">Confirme o ponto no centro do mapa.</div>
     <div class="selection-coordinates hidden" id="selectionCoordinates">Lat: --, Lng: --</div>
 
-    <div class="settings-fab" id="settingsFab" title="Configurações da criticidade padrão">
-      <i class="fa-solid fa-sliders"></i>
+    <div class="settings-fab" id="settingsFab" title="Configurações">
+      <i class="fa-solid fa-gear"></i>
     </div>
 
     <div class="settings-panel hidden" id="settingsPanel">
       <div class="settings-panel-header">
-        <strong>Criticidade padrão</strong>
+        <strong>Opções</strong>
         <button type="button" class="settings-close" id="closeSettingsPanel" aria-label="Fechar">
           <i class="fa-solid fa-xmark"></i>
         </button>
       </div>
-      <div class="settings-options">
-        <button type="button" class="settings-option relato" data-default-criticality="Relato">Relato</button>
-        <button type="button" class="settings-option transtorno" data-default-criticality="Transtorno">Transtorno</button>
-        <button type="button" class="settings-option risco" data-default-criticality="Risco">Risco</button>
-        <button type="button" class="settings-option perigo" data-default-criticality="Perigo">Perigo</button>
+      <div class="settings-menu" id="settingsMenu">
+        <button type="button" class="settings-menu-item" id="settingsLogin" data-auth="guest">
+          <i class="fa-solid fa-right-to-bracket"></i>
+          <span>Acessar</span>
+        </button>
+        <button type="button" class="settings-menu-item" id="settingsProfile" data-auth="logged">
+          <i class="fa-solid fa-user"></i>
+          <span>Meus dados</span>
+        </button>
+        <button type="button" class="settings-menu-item" id="settingsLogout" data-auth="logged">
+          <i class="fa-solid fa-right-from-bracket"></i>
+          <span>Sair</span>
+        </button>
+        <button type="button" class="settings-menu-item" id="settingsCriticality">
+          <i class="fa-solid fa-sliders"></i>
+          <span>Alterar criticidade padrão</span>
+        </button>
       </div>
     </div>
 
-    <div class="modal hidden" id="occurrenceModal">
+    <div class="modal hidden" id="authModal">
+      <div class="card">
+        <h2 id="authTitle">Acessar</h2>
+        <form id="authForm">
+          <label for="authCpf">CPF</label>
+          <input id="authCpf" type="text" inputmode="numeric" placeholder="000.000.000-00" maxlength="14" required />
+
+          <label for="authPassword">Senha</label>
+          <input id="authPassword" type="password" placeholder="Senha" required />
+
+          <div id="authRegisterFields" class="hidden">
+            <label for="authConfirmPassword">Confirmar senha</label>
+            <input id="authConfirmPassword" type="password" placeholder="Confirme a senha" />
+
+            <label for="authName">Nome completo</label>
+            <input id="authName" type="text" placeholder="Seu nome" />
+
+            <label for="authBirthAt">Data de nascimento</label>
+            <input id="authBirthAt" type="date" />
+
+            <label for="authEmail">E-mail</label>
+            <input id="authEmail" type="email" placeholder="seu@email.com" />
+
+            <label for="authCellphone">Celular</label>
+            <input id="authCellphone" type="tel" placeholder="(00) 00000-0000" />
+          </div>
+
+          <div class="actions">
+            <button type="button" class="btn secondary" id="authCancelButton">Cancelar</button>
+            <button type="submit" class="btn primary" id="authSubmitButton">Entrar</button>
+          </div>
+        </form>
+        <div class="auth-toggle">
+          <span id="authToggleText">Não tem conta?</span>
+          <button type="button" class="link-button" id="authToggleButton">Cadastrar</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal hidden" id="profileModal">
+      <div class="card">
+        <h2>Meus dados</h2>
+        <form id="profileForm">
+          <label for="profileName">Nome completo</label>
+          <input id="profileName" type="text" required />
+
+          <label for="profileBirthAt">Data de nascimento</label>
+          <input id="profileBirthAt" type="date" />
+
+          <label for="profileEmail">E-mail</label>
+          <input id="profileEmail" type="email" />
+
+          <label for="profileCellphone">Celular</label>
+          <input id="profileCellphone" type="tel" />
+
+          <div class="actions">
+            <button type="button" class="btn secondary" id="profileCancelButton">Cancelar</button>
+            <button type="submit" class="btn primary">Salvar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="modal hidden" id="confirmLogoutModal">
+      <div class="card confirm-card">
+        <h2>Sair</h2>
+        <p>Tem certeza que deseja sair da sua conta?</p>
+        <div class="actions">
+          <button type="button" class="btn secondary" id="logoutCancelButton">Cancelar</button>
+          <button type="button" class="btn primary" id="logoutConfirmButton">Sair</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal hidden" id="criticalityModal">
+      <div class="card">
+        <h2>Criticidade padrão</h2>
+        <div class="criticality-picker" role="group" aria-label="Criticidade padrão">
+          <button type="button" class="criticality-option relato" data-default-criticality="Relato">
+            <i class="fa-solid fa-comment-dots"></i>
+            <span>Relato</span>
+          </button>
+          <button type="button" class="criticality-option transtorno" data-default-criticality="Transtorno">
+            <i class="fa-solid fa-bolt"></i>
+            <span>Transtorno</span>
+          </button>
+          <button type="button" class="criticality-option risco" data-default-criticality="Risco">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            <span>Risco</span>
+          </button>
+          <button type="button" class="criticality-option perigo" data-default-criticality="Perigo">
+            <i class="fa-solid fa-skull-crossbones"></i>
+            <span>Perigo</span>
+          </button>
+        </div>
+        <div class="actions">
+          <button type="button" class="btn secondary" id="criticalityCancelButton">Cancelar</button>
+          <button type="button" class="btn primary" id="criticalityConfirmButton">Confirmar</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal hidden" id="incidentModal">
       <div class="card">
         <h2>Nova ocorrência</h2>
-        <form id="occurrenceForm">
+        <form id="incidentForm">
+          <label for="title">Título</label>
+          <input id="title" type="text" placeholder="Ex.: Poste danificado" />
+
           <label for="description">Descrição</label>
-          <textarea id="description" required></textarea>
+          <textarea id="description"></textarea>
 
           <label>Criticidade</label>
           <div class="criticality-picker" role="group" aria-label="Criticidade">
             <button type="button" class="criticality-option relato is-active" data-criticality="Relato">
               <i class="fa-solid fa-comment-dots"></i>
-              <span>Relato</span>
+               
             </button>
             <button type="button" class="criticality-option transtorno" data-criticality="Transtorno">
               <i class="fa-solid fa-bolt"></i>
-              <span>Transtorno</span>
+               
             </button>
             <button type="button" class="criticality-option risco" data-criticality="Risco">
               <i class="fa-solid fa-triangle-exclamation"></i>
-              <span>Risco</span>
+               
             </button>
             <button type="button" class="criticality-option perigo" data-criticality="Perigo">
               <i class="fa-solid fa-skull-crossbones"></i>
-              <span>Perigo</span>
+              
             </button>
           </div>
           <input id="criticality" type="hidden" value="Relato" />
@@ -82,9 +205,6 @@
             <h3 id="criticalityHelpTitle">Relato</h3>
             <p id="criticalityHelpText">Registro inicial de um acontecimento sem risco imediato.</p>
           </div>
-
-          <label for="locationLabel">Local</label>
-          <input id="locationLabel" placeholder="Ex.: Praça Central" />
 
           <label for="occurredAt">Data e hora da ocorrência</label>
           <input id="occurredAt" type="datetime-local" />
@@ -100,7 +220,8 @@
           </div>
 
           <label for="photos">Fotos</label>
-          <input id="photos" type="text" placeholder="Ex.: foto1.jpg, foto2.jpg" />
+          <input id="photos" type="file" accept="image/*" multiple />
+          <div class="photo-preview" id="photoPreview"></div>
 
           <div class="hint" id="formHint">Toque em “Nova ocorrência” para escolher o ponto no centro do mapa. A localização será salva automaticamente.</div>
 
@@ -112,6 +233,29 @@
       </div>
     </div>
 
-    <script src="/js/home.js"></script>
+    <div class="modal hidden" id="incidentViewModal">
+      <div class="card incident-view-card" id="incidentViewCard">
+        <div class="incident-view-header">
+          <h2 id="viewTitle"></h2>
+          <button type="button" class="settings-close" id="viewCloseButton" aria-label="Fechar">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        <div class="incident-view-subtitle" id="viewSubtitle"></div>
+        <div class="incident-view-carousel" id="viewCarousel">
+          <img id="viewImage" src="" alt="Foto da ocorrência" />
+          <button type="button" class="carousel-btn prev" id="viewPrevButton" aria-label="Foto anterior">
+            <i class="fa-solid fa-chevron-left"></i>
+          </button>
+          <button type="button" class="carousel-btn next" id="viewNextButton" aria-label="Próxima foto">
+            <i class="fa-solid fa-chevron-right"></i>
+          </button>
+          <div class="carousel-counter" id="viewCounter"></div>
+        </div>
+        <div class="incident-view-description" id="viewDescription"></div>
+      </div>
+    </div>
+
+    <script src="/js/home.js?v=7"></script>
   </body>
 </html>

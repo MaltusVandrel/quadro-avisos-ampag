@@ -15,9 +15,9 @@ O backend é responsável por iniciar e organizar a aplicação NestJS, servindo
 
 - src/app.module.ts: módulo principal da aplicação
 - src/app.controller.ts: rota inicial que renderiza a view principal
-- src/occurrences/: módulo de ocorrências
+- src/incidents/: módulo de ocorrências
 - src/citizens/: módulo de cidadãos
-- src/criticities/: módulo de criticidades
+- src/common/lib/criticality.ts: enum de criticidades
 
 ## Módulos atuais
 
@@ -29,7 +29,7 @@ O backend é responsável por iniciar e organizar a aplicação NestJS, servindo
 - representa entidades relacionadas ao contexto do cadastro.
 
 ### Criticidades
-- representa os tipos de criticidade utilizados nas ocorrências.
+- criticidade é representada por um enum (`src/common/lib/criticality.ts`), não por uma entidade persistida.
 
 ## Observação de implementação
 

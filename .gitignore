@@ -48,4 +48,8 @@ coverage/
 .cache/
 tmp/
 temp/
+gfvb
 
+# Markdown files (agent/docs context) — keep only README.md
+*.md
+!README.md

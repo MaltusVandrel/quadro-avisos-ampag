@@ -5,7 +5,8 @@
 A aplicação segue uma arquitetura simples, com separação entre:
 - camada de apresentação (frontend);
 - camada de aplicação (backend NestJS);
-- camada de domínio (módulos de ocorrências, cidadãos e criticidades).
+- camada de domínio (módulos de ocorrências e cidadãos; criticidade é um enum);
+- camada de dados (`src/database/`, com Drizzle ORM + NeonDB).
 
 ```mermaid
 flowchart LR
@@ -13,7 +14,8 @@ flowchart LR
     B --> C[Backend NestJS]
     C --> D[Módulo de Ocorrências]
     C --> E[Módulo de Cidadãos]
-    C --> F[Módulo de Criticidades]
+    C --> F[Enum de Criticidade]
+    C --> H[Camada de Dados: Drizzle + Neon]
     B --> G[Armazenamento local do navegador]
 ```
 
@@ -28,7 +30,7 @@ flowchart LR
 ### Backend
 - Responsável por iniciar a aplicação e servir a view principal.
 - Organiza o projeto em módulos.
-- Expõe controladores para operações relacionadas a ocorrências, cidadãos e criticidades.
+- Expõe controladores para operações relacionadas a ocorrências e cidadãos.
 
 ## Observação importante
 
