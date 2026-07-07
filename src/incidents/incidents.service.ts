@@ -6,6 +6,14 @@ import { Incident } from './incident.entity';
 import { CitizensService } from '../citizens/citizens.service';
 import { Criticality, isCriticality } from '../common/lib/criticality';
 
+function toUtcDate(value: string | Date | null | undefined): Date | undefined {
+  if (!value) return undefined;
+  if (value instanceof Date) return new Date(value.toISOString());
+  const str = String(value);
+  const date = /Z$|[+-]\d{2}:\d{2}$/.test(str) ? new Date(str) : new Date(`${str}Z`);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
 export interface CreateIncidentInput extends Omit<Incident, 'id' | 'createdAt' | 'updatedAt' | 'reviewed'> {
   fileIds?: string[];
 }
@@ -294,11 +302,11 @@ export class IncidentsService {
       anonId: row.anonId ?? undefined,
       boOpened: row.boOpened,
       boNumberOrProtocol: row.boNumberOrProtocol ?? undefined,
-      occurredAt: row.occurredAt,
+      occurredAt: toUtcDate(row.occurredAt),
       reviewed: row.reviewed,
       active: row.active,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
+      createdAt: toUtcDate(row.createdAt),
+      updatedAt: toUtcDate(row.updatedAt),
       createdBy: row.createdBy ?? undefined,
       updatedBy: row.updatedBy ?? undefined,
     };

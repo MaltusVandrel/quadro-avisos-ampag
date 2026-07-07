@@ -87,6 +87,62 @@ function parseCpf(value) {
   return value.replace(/\D/g, '');
 }
 
+function ensureUtcDate(value) {
+  if (!value) return null;
+  const str = String(value);
+  if (/Z$|[+-]\d{2}:\d{2}$/.test(str)) {
+    const date = new Date(str);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  const date = new Date(`${str}Z`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function localDateTimeToUtcISO(localValue) {
+  if (!localValue) return '';
+  const date = new Date(localValue);
+  return Number.isNaN(date.getTime()) ? '' : date.toISOString();
+}
+
+function utcToLocalDateTime(isoString) {
+  const date = ensureUtcDate(isoString);
+  if (!date) return '';
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function localDateToUtcISO(localValue) {
+  if (!localValue) return '';
+  const date = new Date(localValue);
+  return Number.isNaN(date.getTime()) ? '' : date.toISOString();
+}
+
+function utcToLocalDate(isoString) {
+  const date = ensureUtcDate(isoString);
+  if (!date) return '';
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatUtcToLocal(value) {
+  if (!value) return '';
+  const date = ensureUtcDate(value);
+  if (!date) return '';
+  return date.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 function openModalById(id) {
   document.querySelectorAll('.modal').forEach((modal) => modal.classList.add('hidden'));
   document.getElementById(id).classList.remove('hidden');
@@ -356,9 +412,13 @@ function setIncidentMarkersVisible(isVisible) {
       marker.map = isVisible ? map : null;
     }
   });
+
+  if (!isVisible && markerCluster) {
+    markerCluster.clearMarkers();
+  }
 }
 
-function startSelectionMode() {
+function startSelectionMode(centerAt = null) {
   if (!map || !AdvancedMarkerElementCtor || selectionModeActive) {
     return;
   }
@@ -366,8 +426,14 @@ function startSelectionMode() {
   selectionModeActive = true;
   previousSelection = selectedPosition ? { ...selectedPosition } : null;
 
-  const center = map.getCenter();
-  const position = { lat: center.lat(), lng: center.lng() };
+  let position;
+  if (centerAt) {
+    map.setCenter(centerAt);
+    position = { ...centerAt };
+  } else {
+    const center = map.getCenter();
+    position = { lat: center.lat(), lng: center.lng() };
+  }
 
   setSelectionUIVisible(false);
   setIncidentMarkersVisible(false);
@@ -425,6 +491,8 @@ function cancelSelectionMode() {
   if (editingIncidentId) {
     openModal(true);
   }
+
+  loadVisibleIncidents();
 }
 
 function confirmSelectionMode() {
@@ -462,6 +530,7 @@ function confirmSelectionMode() {
 
   setSelectedPosition(position);
   openModal(!!editingIncidentId);
+  loadVisibleIncidents();
 }
 
 function renderIncidentMarker(item) {
@@ -539,16 +608,7 @@ function canEdit(incident) {
 }
 
 function formatIncidentDate(value) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatUtcToLocal(value);
 }
 
 function renderViewCarousel() {
@@ -647,10 +707,9 @@ async function openIncidentEdit(incident) {
 
   const occurredAtInput = document.getElementById('occurredAt');
   if (incident.occurredAt) {
-    const date = new Date(incident.occurredAt);
-    occurredAtInput.value = date.toISOString().slice(0, 16);
+    occurredAtInput.value = utcToLocalDateTime(incident.occurredAt);
   } else {
-    occurredAtInput.value = new Date().toISOString().slice(0, 16);
+    occurredAtInput.value = utcToLocalDateTime(new Date().toISOString());
   }
 
   const boOpenedInput = document.getElementById('boOpened');
@@ -842,6 +901,7 @@ function refreshClusters() {
 
 async function loadVisibleIncidents() {
   if (!map) return;
+  if (selectionModeActive) return;
 
   const bounds = map.getBounds();
   if (!bounds) return;
@@ -898,7 +958,7 @@ function openModal(isEdit = false) {
   }
 
   if (!isEdit) {
-    document.getElementById('occurredAt').value = new Date().toISOString().slice(0, 16);
+    document.getElementById('occurredAt').value = utcToLocalDateTime(new Date().toISOString());
   }
 }
 
@@ -1142,7 +1202,7 @@ async function handleAuthSubmit(event) {
       cpf,
       password,
       name,
-      birthAt: document.getElementById('authBirthAt').value || undefined,
+      birthAt: localDateToUtcISO(document.getElementById('authBirthAt').value) || undefined,
       email: document.getElementById('authEmail').value || undefined,
       cellphone: document.getElementById('authCellphone').value || undefined,
       anonId: getAnonymousProfile()?.id,
@@ -1178,7 +1238,7 @@ async function handleAuthSubmit(event) {
     try {
       await api('/auth/reset-password', {
         method: 'POST',
-        body: JSON.stringify({ cpf, birthAt, password: resetPassword }),
+        body: JSON.stringify({ cpf, birthAt: localDateToUtcISO(birthAt), password: resetPassword }),
       });
       alert('Senha atualizada com sucesso.');
       updateAuthModalMode('login');
@@ -1214,7 +1274,7 @@ async function openProfileModal() {
   const citizen = await api('/citizens/me');
   document.getElementById('profileName').value = citizen.name || '';
   document.getElementById('profileBirthAt').value = citizen.birthAt
-    ? citizen.birthAt.slice(0, 10)
+    ? utcToLocalDate(citizen.birthAt)
     : '';
   document.getElementById('profileEmail').value = citizen.email || '';
   document.getElementById('profileCellphone').value = citizen.cellphone || '';
@@ -1226,7 +1286,7 @@ async function handleProfileSubmit(event) {
 
   const body = {
     name: document.getElementById('profileName').value.trim(),
-    birthAt: document.getElementById('profileBirthAt').value || undefined,
+    birthAt: localDateToUtcISO(document.getElementById('profileBirthAt').value) || undefined,
     email: document.getElementById('profileEmail').value || undefined,
     cellphone: document.getElementById('profileCellphone').value || undefined,
   };
@@ -1641,10 +1701,12 @@ async function initMap() {
   document.getElementById('cancelSelectionButton').addEventListener('click', cancelSelectionMode);
   document.getElementById('cancelButton').addEventListener('click', closeModal);
   document.getElementById('changeLocationButton')?.addEventListener('click', () => {
-    if (selectedPosition && map) {
-      map.setCenter(selectedPosition);
+    closeModalById('incidentModal');
+    const hint = document.getElementById('selectionHint');
+    if (hint) {
+      hint.textContent = 'Reposicione o ponto no centro do mapa e confirme.';
     }
-    startSelectionMode();
+    startSelectionMode(selectedPosition);
   });
   document.getElementById('boOpened').addEventListener('change', toggleBoField);
   document.getElementById('photos')?.addEventListener('change', (event) => {
@@ -1710,7 +1772,7 @@ async function initMap() {
       criticality: document.getElementById('criticality').value,
       boOpened: document.getElementById('boOpened').checked,
       boNumberOrProtocol: document.getElementById('boNumberOrProtocol').value.trim() || undefined,
-      occurredAt: document.getElementById('occurredAt').value || new Date().toISOString(),
+      occurredAt: localDateTimeToUtcISO(document.getElementById('occurredAt').value) || new Date().toISOString(),
     };
 
     try {

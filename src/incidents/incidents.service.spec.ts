@@ -342,6 +342,20 @@ describe('IncidentsService', () => {
     expect(updated.id).toBe(created.id);
   });
 
+  it('returns occurredAt as UTC ISO string', async () => {
+    const citizen = await createCitizen('Julia');
+
+    const created = await service.create(
+      buildIncidentData({
+        citizenId: citizen.id,
+        anonId: citizen.anonId,
+        occurredAt: new Date('2026-01-10T10:00:00.000Z'),
+      }),
+    );
+
+    expect(created.occurredAt?.toISOString()).toBe('2026-01-10T10:00:00.000Z');
+  });
+
   it('throws for unresolved citizen or invalid criticality', async () => {
     await expect(
       service.create(

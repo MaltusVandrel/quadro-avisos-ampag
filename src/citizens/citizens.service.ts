@@ -28,6 +28,14 @@ function normalizeCpf(cpf: string): string {
   return cpf.replace(/\D/g, '').slice(0, 11);
 }
 
+function toUtcDate(value: string | Date | null | undefined): Date | undefined {
+  if (!value) return undefined;
+  if (value instanceof Date) return new Date(value.toISOString());
+  const str = String(value);
+  const date = /Z$|[+-]\d{2}:\d{2}$/.test(str) ? new Date(str) : new Date(`${str}Z`);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
 @Injectable()
 export class CitizensService {
   async create(data: CreateCitizenInput): Promise<Citizen> {
@@ -180,14 +188,14 @@ export class CitizensService {
       password: row.password,
       name: row.name,
       address: row.address ?? undefined,
-      birthAt: row.birthAt ?? undefined,
+      birthAt: toUtcDate(row.birthAt),
       email: row.email ?? undefined,
       cellphone: row.cellphone ?? undefined,
       anonId: row.anonId ?? undefined,
       role: row.role,
       active: row.active,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
+      createdAt: toUtcDate(row.createdAt),
+      updatedAt: toUtcDate(row.updatedAt),
       createdBy: row.createdBy ?? undefined,
       updatedBy: row.updatedBy ?? undefined,
     };
