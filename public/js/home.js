@@ -710,6 +710,52 @@ function readFileAsDataURL(file) {
   });
 }
 
+function resizeImageFile(file, maxWidth = 1280, quality = 0.85) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const objectUrl = URL.createObjectURL(file);
+
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+
+      let { width, height } = image;
+      if (width > maxWidth) {
+        height = Math.round(height * (maxWidth / width));
+        width = maxWidth;
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext('2d');
+      if (!context) {
+        reject(new Error('Falha ao criar contexto do canvas'));
+        return;
+      }
+      context.drawImage(image, 0, 0, width, height);
+
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            reject(new Error('Falha ao gerar imagem redimensionada'));
+            return;
+          }
+          resolve(blob);
+        },
+        'image/jpeg',
+        quality,
+      );
+    };
+
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Falha ao carregar imagem para redimensionamento'));
+    };
+
+    image.src = objectUrl;
+  });
+}
+
 async function uploadPhotos(files) {
   const status = document.getElementById('photoUploadStatus') || document.createElement('div');
   status.id = 'photoUploadStatus';
@@ -736,10 +782,21 @@ async function uploadPhotos(files) {
     uploadedFiles.push(fileEntry);
     renderPhotoPreview();
 
+    status.textContent = `Preparando ${file.name}...`;
+
+    let uploadFile;
+    try {
+      uploadFile = await resizeImageFile(file);
+      console.log(`[uploadPhotos] ${file.name} redimensionado: ${file.size} -> ${uploadFile.size}`);
+    } catch (error) {
+      console.warn(`[uploadPhotos] falha ao redimensionar ${file.name}, usando original:`, error);
+      uploadFile = file;
+    }
+
     status.textContent = `Enviando ${file.name}...`;
 
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('file', uploadFile, file.name);
 
     try {
       const result = await fetch('/uploads', {
@@ -748,6 +805,8 @@ async function uploadPhotos(files) {
       });
 
       if (!result.ok) {
+        const body = await result.text().catch(() => '');
+        console.log('[uploadPhotos] erro no upload:', result.status, body);
         throw new Error(`Erro ${result.status}`);
       }
 
@@ -1000,8 +1059,18 @@ async function handleCameraReport(file) {
     const previewUrl = await readFileAsDataURL(file);
     console.log('[cameraReport] preview gerado, length:', previewUrl.length);
 
+    status.textContent = 'Preparando foto...';
+    let uploadFile;
+    try {
+      uploadFile = await resizeImageFile(file);
+      console.log('[cameraReport] foto redimensionada:', file.size, '->', uploadFile.size);
+    } catch (resizeError) {
+      console.warn('[cameraReport] falha ao redimensionar, usando original:', resizeError);
+      uploadFile = file;
+    }
+
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('file', uploadFile, file.name);
     console.log('[cameraReport] iniciando upload para /uploads');
 
     const result = await fetch('/uploads', { method: 'POST', body: formData });
