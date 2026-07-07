@@ -936,37 +936,55 @@ function requestDeviceOrientation() {
 
 async function checkCameraReportAvailability() {
   const cameraButton = document.getElementById('cameraReportButton');
-  if (!cameraButton) return;
+  if (!cameraButton) {
+    console.log('[camera] botão não encontrado no DOM');
+    return;
+  }
+
+  console.log('[camera] verificando disponibilidade...');
 
   try {
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      console.log('[camera] getUserMedia não disponível');
       return;
     }
     await navigator.mediaDevices.getUserMedia({ video: true });
-  } catch {
+    console.log('[camera] permissão de câmera concedida');
+  } catch (error) {
+    console.log('[camera] permissão de câmera negada ou erro:', error?.name, error?.message);
     return;
   }
 
   if (!navigator.geolocation) {
+    console.log('[camera] geolocalização não disponível');
     return;
   }
 
   navigator.geolocation.getCurrentPosition(
     (position) => {
       const accuracy = position.coords ? position.coords.accuracy : null;
+      console.log('[camera] localização obtida, precisão:', accuracy);
       if (accuracy != null && accuracy <= 1000) {
         cameraButton.classList.remove('hidden');
+        console.log('[camera] botão exibido');
+      } else {
+        console.log('[camera] precisão insuficiente para exibir botão');
       }
     },
-    () => {
-      // Geolocation error; keep button hidden.
+    (error) => {
+      console.log('[camera] erro ao obter localização:', error?.code, error?.message);
     },
     { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
   );
 }
 
 async function handleCameraReport(file) {
-  if (!file) return;
+  if (!file) {
+    console.log('[cameraReport] nenhum arquivo recebido');
+    return;
+  }
+
+  console.log('[cameraReport] arquivo selecionado:', file.name, file.type, file.size);
 
   const status = document.getElementById('photoUploadStatus') || document.createElement('div');
   status.id = 'photoUploadStatus';
@@ -980,17 +998,27 @@ async function handleCameraReport(file) {
   let fileId;
   try {
     const previewUrl = await readFileAsDataURL(file);
+    console.log('[cameraReport] preview gerado, length:', previewUrl.length);
+
     const formData = new FormData();
     formData.append('file', file);
+    console.log('[cameraReport] iniciando upload para /uploads');
+
     const result = await fetch('/uploads', { method: 'POST', body: formData });
+    console.log('[cameraReport] resposta do upload:', result.status);
+
     if (!result.ok) {
+      const body = await result.text().catch(() => '');
+      console.log('[cameraReport] corpo do erro:', body);
       throw new Error(`Erro ${result.status}`);
     }
+
     const data = await result.json();
+    console.log('[cameraReport] upload concluído:', data);
     fileId = data.fileId;
   } catch (error) {
-    console.error('Failed to upload camera photo:', error);
-    alert('Não foi possível enviar a foto. Tente novamente.');
+    console.error('[cameraReport] falha no upload:', error);
+    alert(`Não foi possível enviar a foto: ${error.message || 'erro desconhecido'}`);
     status.textContent = '';
     return;
   }
@@ -999,6 +1027,8 @@ async function handleCameraReport(file) {
 
   navigator.geolocation.getCurrentPosition(
     async (position) => {
+      console.log('[cameraReport] localização:', position.coords.latitude, position.coords.longitude, 'precisão:', position.coords.accuracy);
+
       const anonymousProfile = initializeAnonymousProfile();
       const session = getSession();
 
@@ -1016,18 +1046,21 @@ async function handleCameraReport(file) {
         occurredAt: new Date().toISOString(),
       };
 
+      console.log('[cameraReport] criando ocorrência:', incident);
+
       try {
-        await api('/incidents', { method: 'POST', body: JSON.stringify(incident) });
+        const created = await api('/incidents', { method: 'POST', body: JSON.stringify(incident) });
+        console.log('[cameraReport] ocorrência criada:', created);
         await loadVisibleIncidents();
         status.textContent = '';
       } catch (error) {
-        console.error('Failed to create camera incident:', error);
+        console.error('[cameraReport] falha ao criar ocorrência:', error);
         alert(error.message || 'Erro ao salvar ocorrência.');
         status.textContent = '';
       }
     },
     (error) => {
-      console.error('Failed to get location for camera report:', error);
+      console.error('[cameraReport] falha ao obter localização:', error?.code, error?.message);
       alert('Não foi possível obter a localização precisa.');
       status.textContent = '';
     },
@@ -1203,12 +1236,14 @@ async function initMap() {
   });
 
   document.getElementById('cameraReportButton')?.addEventListener('click', () => {
+    console.log('[camera] botão de câmera clicado');
     requestDeviceOrientation();
     document.getElementById('cameraInput')?.click();
   });
 
   document.getElementById('cameraInput')?.addEventListener('change', (event) => {
     const files = event.target.files;
+    console.log('[camera] input change, arquivos:', files ? files.length : 0);
     if (files && files.length > 0) {
       handleCameraReport(files[0]);
     }
