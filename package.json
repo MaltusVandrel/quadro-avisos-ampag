@@ -20,7 +20,7 @@
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
     "express-handlebars": "^9.0.1",
-    "jose": "^6.2.3",
+    "jose": "^5.9.6",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.1"
   },

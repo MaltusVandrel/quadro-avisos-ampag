@@ -88,6 +88,19 @@ export class AuthController {
     return { ok: true };
   }
 
+  @Post('reset-password')
+  async resetPassword(
+    @Body() body: { cpf: string; birthAt: string; password: string },
+  ) {
+    if (!body.cpf || !body.birthAt || !body.password) {
+      throw new UnauthorizedException('CPF, data de nascimento e nova senha são obrigatórios');
+    }
+
+    await this.citizensService.resetPassword(body.cpf, body.birthAt, body.password);
+
+    return { message: 'Senha atualizada com sucesso' };
+  }
+
   @Get('me')
   @UseGuards(AuthGuard)
   async me(@CurrentUser('sub') userId: number) {

@@ -1010,12 +1010,22 @@ function renderSettingsMenu() {
 
 function updateAuthModalMode(mode) {
   const isRegister = mode === 'register';
-  document.getElementById('authTitle').textContent = isRegister ? 'Criar conta' : 'Acessar';
+  const isReset = mode === 'reset';
+  const title = isRegister ? 'Criar conta' : isReset ? 'Redefinir senha' : 'Acessar';
+  document.getElementById('authTitle').textContent = title;
+  document.getElementById('authPasswordField').classList.toggle('hidden', isReset);
   document.getElementById('authRegisterFields').classList.toggle('hidden', !isRegister);
-  document.getElementById('authSubmitButton').textContent = isRegister ? 'Cadastrar' : 'Entrar';
-  document.getElementById('authToggleText').textContent = isRegister ? 'Já tem conta?' : 'Não tem conta?';
-  document.getElementById('authToggleButton').textContent = isRegister ? 'Entrar' : 'Cadastrar';
+  document.getElementById('authResetFields').classList.toggle('hidden', !isReset);
+  document.getElementById('authSubmitButton').textContent = isRegister ? 'Cadastrar' : isReset ? 'Redefinir' : 'Entrar';
+  document.getElementById('authToggleText').textContent = isRegister ? 'Já tem conta?' : isReset ? 'Lembrou a senha?' : 'Não tem conta?';
+  document.getElementById('authToggleButton').textContent = isRegister || isReset ? 'Entrar' : 'Cadastrar';
+  document.getElementById('authForgotButton')?.classList.toggle('hidden', isRegister || isReset);
   document.getElementById('authForm').dataset.mode = mode;
+
+  const authPassword = document.getElementById('authPassword');
+  if (authPassword) {
+    authPassword.required = !isReset;
+  }
 }
 
 async function handleAuthSubmit(event) {
@@ -1054,6 +1064,39 @@ async function handleAuthSubmit(event) {
       setSession({ token: result.token, citizen: result.citizen });
     } catch (error) {
       alert(error.message || 'Erro ao criar conta. Tente novamente.');
+      return;
+    }
+  } else if (mode === 'reset') {
+    const resetPassword = document.getElementById('authResetPassword').value;
+    const resetConfirmPassword = document.getElementById('authResetConfirmPassword').value;
+    const birthAt = document.getElementById('authResetBirthAt').value;
+
+    if (!birthAt) {
+      alert('Data de nascimento é obrigatória.');
+      return;
+    }
+
+    if (!resetPassword) {
+      alert('Nova senha é obrigatória.');
+      return;
+    }
+
+    if (resetPassword !== resetConfirmPassword) {
+      alert('As senhas não conferem.');
+      return;
+    }
+
+    try {
+      await api('/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({ cpf, birthAt, password: resetPassword }),
+      });
+      alert('Senha atualizada com sucesso.');
+      updateAuthModalMode('login');
+      document.getElementById('authForm').reset();
+      return;
+    } catch (error) {
+      alert(error.message || 'Erro ao redefinir senha. Verifique os dados.');
       return;
     }
   } else {
@@ -1412,6 +1455,10 @@ async function initMap() {
   document.getElementById('authToggleButton')?.addEventListener('click', () => {
     const currentMode = document.getElementById('authForm').dataset.mode || 'login';
     updateAuthModalMode(currentMode === 'login' ? 'register' : 'login');
+  });
+
+  document.getElementById('authForgotButton')?.addEventListener('click', () => {
+    updateAuthModalMode('reset');
   });
 
   document.getElementById('authCancelButton')?.addEventListener('click', () => closeModalById('authModal'));

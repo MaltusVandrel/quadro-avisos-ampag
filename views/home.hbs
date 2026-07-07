@@ -79,8 +79,10 @@
           <label for="authCpf">CPF</label>
           <input id="authCpf" type="text" inputmode="numeric" placeholder="000.000.000-00" maxlength="14" required />
 
-          <label for="authPassword">Senha</label>
-          <input id="authPassword" type="password" placeholder="Senha" required />
+          <div id="authPasswordField">
+            <label for="authPassword">Senha</label>
+            <input id="authPassword" type="password" placeholder="Senha" required />
+          </div>
 
           <div id="authRegisterFields" class="hidden">
             <label for="authConfirmPassword">Confirmar senha</label>
@@ -99,6 +101,17 @@
             <input id="authCellphone" type="tel" placeholder="(00) 00000-0000" />
           </div>
 
+          <div id="authResetFields" class="hidden">
+            <label for="authResetBirthAt">Data de nascimento</label>
+            <input id="authResetBirthAt" type="date" />
+
+            <label for="authResetPassword">Nova senha</label>
+            <input id="authResetPassword" type="password" placeholder="Nova senha" />
+
+            <label for="authResetConfirmPassword">Repetir nova senha</label>
+            <input id="authResetConfirmPassword" type="password" placeholder="Repita a nova senha" />
+          </div>
+
           <div class="actions">
             <button type="button" class="btn secondary" id="authCancelButton">Cancelar</button>
             <button type="submit" class="btn primary" id="authSubmitButton">Entrar</button>
@@ -107,6 +120,9 @@
         <div class="auth-toggle">
           <span id="authToggleText">Não tem conta?</span>
           <button type="button" class="link-button" id="authToggleButton">Cadastrar</button>
+        </div>
+        <div class="auth-toggle">
+          <button type="button" class="link-button" id="authForgotButton">Esqueci minha senha</button>
         </div>
       </div>
     </div>
@@ -273,6 +289,6 @@
       </button>
     </div>
 
-    <script src="/js/home.js?v=13"></script>
+    <script src="/js/home.js?v=16"></script>
   </body>
 </html>

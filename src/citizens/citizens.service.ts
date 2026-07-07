@@ -139,6 +139,40 @@ export class CitizensService {
     return valid ? citizen : undefined;
   }
 
+  async resetPassword(cpf: string, birthAt: string | Date, newPassword: string): Promise<Citizen> {
+    const normalizedCpf = normalizeCpf(cpf);
+    const [citizen] = await db
+      .select()
+      .from(citizens)
+      .where(eq(citizens.cpf, normalizedCpf))
+      .limit(1);
+
+    if (!citizen) {
+      throw new NotFoundException('Cidadão não encontrado');
+    }
+
+    if (!citizen.birthAt) {
+      throw new NotFoundException('Data de nascimento não cadastrada');
+    }
+
+    const inputDate = new Date(birthAt).toISOString().slice(0, 10);
+    const storedDate = new Date(citizen.birthAt).toISOString().slice(0, 10);
+
+    if (inputDate !== storedDate) {
+      throw new NotFoundException('Dados não conferem');
+    }
+
+    const passwordHash = hashPassword(newPassword);
+
+    const [result] = await db
+      .update(citizens)
+      .set({ password: passwordHash, updatedAt: new Date() })
+      .where(eq(citizens.id, citizen.id))
+      .returning();
+
+    return this.mapToEntity(result);
+  }
+
   private mapToEntity(row: (typeof citizens.$inferSelect)): Citizen {
     return {
       id: row.id,

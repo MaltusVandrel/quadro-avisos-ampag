@@ -26,6 +26,7 @@ const PUBLIC_PATHS = [
   /^\/sw\.js$/,
   /^\/auth\/login$/,
   /^\/auth\/register$/,
+  /^\/auth\/reset-password$/,
   /^\/citizens$/,
   /^\/incidents$/,
   /^\/incidents\/map$/,
