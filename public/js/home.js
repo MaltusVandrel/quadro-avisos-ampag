@@ -1696,7 +1696,7 @@ async function initMap() {
   updateCriticalitySelection(defaultCriticality);
   renderSettingsMenu();
 
-  document.getElementById('openFormButton').addEventListener('click', startSelectionMode);
+  document.getElementById('openFormButton').addEventListener('click', () => startSelectionMode());
   document.getElementById('confirmSelectionButton').addEventListener('click', confirmSelectionMode);
   document.getElementById('cancelSelectionButton').addEventListener('click', cancelSelectionMode);
   document.getElementById('cancelButton').addEventListener('click', closeModal);
