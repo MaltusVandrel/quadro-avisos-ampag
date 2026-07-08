@@ -30,7 +30,7 @@ export interface MapFilters {
   south: number;
   east: number;
   west: number;
-  days: number;
+  days?: number;
   citizenId?: number;
   anonId?: string;
   isAdmin?: boolean;
@@ -102,16 +102,21 @@ export class IncidentsService {
   }
 
   async findForMap(filters: MapFilters): Promise<Incident[]> {
-    const startDate = new Date(Date.now() - filters.days * 24 * 60 * 60 * 1000);
-
     const conditions = [
-      gte(incidents.occurredAt, startDate),
       eq(incidents.active, true),
+    ];
+
+    if (filters.days) {
+      const startDate = new Date(Date.now() - filters.days * 24 * 60 * 60 * 1000);
+      conditions.push(gte(incidents.occurredAt, startDate));
+    }
+
+    conditions.push(
       gte(incidents.latitude, filters.south),
       lte(incidents.latitude, filters.north),
       gte(incidents.longitude, filters.west),
       lte(incidents.longitude, filters.east),
-    ];
+    );
 
     if (filters.criticalities && filters.criticalities.length > 0) {
       conditions.push(inArray(incidents.criticality, filters.criticalities));

@@ -1000,8 +1000,11 @@ async function loadVisibleIncidents() {
     south: String(south),
     east: String(east),
     west: String(west),
-    days: String(filters.days),
   });
+
+  if (filters.days > 0) {
+    params.append('days', String(filters.days));
+  }
 
   if (filters.criticalities && filters.criticalities.length > 0) {
     params.append('criticalities', filters.criticalities.join(','));
@@ -1456,8 +1459,11 @@ function applyFilters() {
   const pendingOnly = document.getElementById('filterPendingOnly').checked;
   const isAdmin = session?.citizen?.role === 'admin';
 
+  const rawDays = document.getElementById('filterPeriod').value;
+  const days = rawDays === '0' ? 0 : Number(rawDays) || 15;
+
   const filters = {
-    days: Number(document.getElementById('filterPeriod').value) || 15,
+    days,
     criticalities,
     pendingOnly: isAdmin ? pendingOnly : false,
     mineOnly: document.getElementById('filterMineOnly').checked,

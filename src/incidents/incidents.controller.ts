@@ -59,7 +59,7 @@ export class IncidentsController {
       south: Number(south),
       east: Number(east),
       west: Number(west),
-      days: Number(days) || 15,
+      days: Number(days) || undefined,
       anonId,
       citizenId,
       isAdmin,
