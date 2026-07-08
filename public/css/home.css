@@ -174,7 +174,7 @@ html, body {
 }
 
 .hidden {
-  display: none;
+  display: none !important;
 }
 
 .selection-actions:not(.hidden) {
@@ -266,6 +266,12 @@ html, body {
 .criticality-option.is-active {
   border-color: #111827;
   box-shadow: 0 0 0 2px rgba(17, 24, 39, 0.12);
+  transform: scale(1.05);
+}
+
+#criticalityModal .criticality-option.is-active {
+  outline: 3px solid #111827;
+  outline-offset: 2px;
 }
 
 .criticality-help {
@@ -546,13 +552,27 @@ html, body {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 10px;
-  padding: 0 16px 16px;
+  padding: 16px 16px 16px;
   background: rgba(255, 255, 255, 0.9);
 }
 
 .incident-view-actions .btn {
   flex: 1 1 auto;
   min-width: 90px;
+}
+
+.anonymous-edit-hint {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  font-style: italic;
+  background: rgba(255, 255, 255, 0.85);
+  color: #374151;
 }
 
 /* Fullscreen image viewer with pinch zoom */
@@ -605,4 +625,28 @@ html, body {
   align-items: center;
   justify-content: center;
   z-index: 30;
+}
+
+.filter-criticality-picker {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 6px 0 16px;
+}
+
+#filterForm select {
+  width: 100%;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  font-size: 14px;
+}
+
+#filterForm label[for="filterPeriod"],
+#filterForm > label:not([class]) {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  color: #374151;
 }

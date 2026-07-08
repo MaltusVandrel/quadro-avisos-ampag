@@ -30,9 +30,13 @@ export interface MapFilters {
   south: number;
   east: number;
   west: number;
+  days: number;
   citizenId?: number;
   anonId?: string;
   isAdmin?: boolean;
+  criticalities?: Criticality[];
+  pendingOnly?: boolean;
+  mineOnly?: boolean;
 }
 
 @Injectable()
@@ -53,8 +57,11 @@ export class IncidentsService {
       throw new NotFoundException('Criticidade inválida');
     }
 
-    if (!data.fileIds || data.fileIds.length === 0) {
-      throw new BadRequestException('É necessário enviar pelo menos uma foto');
+    const hasText = Boolean(data.title) || Boolean(data.description);
+    const hasPhoto = data.fileIds && data.fileIds.length > 0;
+
+    if (!hasText && !hasPhoto) {
+      throw new BadRequestException('Envie pelo menos uma foto ou preencha título e descrição');
     }
 
     const [result] = await db
@@ -95,11 +102,38 @@ export class IncidentsService {
   }
 
   async findForMap(filters: MapFilters): Promise<Incident[]> {
-    const fifteenDaysAgo = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000);
+    const startDate = new Date(Date.now() - filters.days * 24 * 60 * 60 * 1000);
 
-    const permissionFilter = filters.isAdmin
-      ? undefined
-      : filters.citizenId
+    const conditions = [
+      gte(incidents.occurredAt, startDate),
+      eq(incidents.active, true),
+      gte(incidents.latitude, filters.south),
+      lte(incidents.latitude, filters.north),
+      gte(incidents.longitude, filters.west),
+      lte(incidents.longitude, filters.east),
+    ];
+
+    if (filters.criticalities && filters.criticalities.length > 0) {
+      conditions.push(inArray(incidents.criticality, filters.criticalities));
+    }
+
+    if (filters.pendingOnly && filters.isAdmin) {
+      conditions.push(eq(incidents.reviewed, false));
+    }
+
+    if (filters.mineOnly) {
+      const mineConditions = [
+        filters.citizenId ? eq(incidents.citizenId, filters.citizenId) : undefined,
+        filters.anonId ? eq(incidents.anonId, filters.anonId) : undefined,
+      ].filter(Boolean);
+
+      if (mineConditions.length === 0) {
+        return [];
+      }
+
+      conditions.push(or(...mineConditions));
+    } else if (!filters.isAdmin) {
+      const permissionFilter = filters.citizenId
         ? or(
             eq(incidents.reviewed, true),
             eq(incidents.citizenId, filters.citizenId),
@@ -110,16 +144,6 @@ export class IncidentsService {
             filters.anonId ? eq(incidents.anonId, filters.anonId) : undefined,
           );
 
-    const conditions = [
-      gte(incidents.occurredAt, fifteenDaysAgo),
-      eq(incidents.active, true),
-      gte(incidents.latitude, filters.south),
-      lte(incidents.latitude, filters.north),
-      gte(incidents.longitude, filters.west),
-      lte(incidents.longitude, filters.east),
-    ];
-
-    if (permissionFilter) {
       conditions.push(permissionFilter);
     }
 
@@ -200,15 +224,20 @@ export class IncidentsService {
       .returning();
 
     if (data.fileIds !== undefined) {
-      await this.syncIncidentFiles(id, data.fileIds);
+      const hasText = Boolean(data.title) || Boolean(data.description) || Boolean(existing.title) || Boolean(existing.description);
+      await this.syncIncidentFiles(id, data.fileIds, hasText);
     }
 
     return this.mapToEntity(result);
   }
 
-  private async syncIncidentFiles(id: number, fileIds: string[]): Promise<void> {
-    if (fileIds.length === 0) {
-      throw new BadRequestException('É necessário manter pelo menos uma foto');
+  private async syncIncidentFiles(
+    id: number,
+    fileIds: string[],
+    hasText: boolean,
+  ): Promise<void> {
+    if (fileIds.length === 0 && !hasText) {
+      throw new BadRequestException('É necessário manter pelo menos uma foto ou preencher título e descrição');
     }
 
     const currentFiles = await db
@@ -227,18 +256,20 @@ export class IncidentsService {
         .where(inArray(uploadcareFiles.fileId, removedFileIds));
     }
 
-    await db
-      .update(uploadcareFiles)
-      .set({ incidentId: id })
-      .where(inArray(uploadcareFiles.fileId, fileIds));
+    if (fileIds.length > 0) {
+      await db
+        .update(uploadcareFiles)
+        .set({ incidentId: id })
+        .where(inArray(uploadcareFiles.fileId, fileIds));
+    }
 
     const remainingFiles = await db
       .select()
       .from(uploadcareFiles)
       .where(eq(uploadcareFiles.incidentId, id));
 
-    if (remainingFiles.length === 0) {
-      throw new BadRequestException('É necessário manter pelo menos uma foto válida');
+    if (remainingFiles.length === 0 && !hasText) {
+      throw new BadRequestException('É necessário manter pelo menos uma foto válida ou preencher título e descrição');
     }
   }
 

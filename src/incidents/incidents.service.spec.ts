@@ -37,9 +37,9 @@ jest.mock('../database/connection', () => {
         from: jest.fn((table: any) => ({
           where: jest.fn(() => {
             if (isIncidentsTable(table)) {
-              return {
-                limit: jest.fn(() => Promise.resolve(storedIncident ? [storedIncident] : [])),
-              };
+              const rows = storedIncident ? [storedIncident] : [];
+              (rows as any).limit = jest.fn(() => Promise.resolve(rows));
+              return rows;
             }
             if (isUploadcareFilesTable(table)) {
               return Promise.resolve(filesStore);
@@ -304,13 +304,15 @@ describe('IncidentsService', () => {
     ).rejects.toThrow(ForbiddenException);
   });
 
-  it('throws when trying to remove all photos', async () => {
+  it('throws when trying to remove all photos without title and description', async () => {
     const citizen = await createCitizen('Helena');
 
     const created = await service.create(
       buildIncidentData({
         citizenId: citizen.id,
         anonId: citizen.anonId,
+        title: '',
+        description: '',
       }),
     );
 
@@ -321,6 +323,25 @@ describe('IncidentsService', () => {
         anonId: citizen.anonId,
       }),
     ).rejects.toThrow(BadRequestException);
+  });
+
+  it('allows removing all photos when title and description are present', async () => {
+    const citizen = await createCitizen('Helena2');
+
+    const created = await service.create(
+      buildIncidentData({
+        citizenId: citizen.id,
+        anonId: citizen.anonId,
+      }),
+    );
+
+    const updated = await service.update(created.id, {
+      fileIds: [],
+      citizenId: citizen.id,
+      anonId: citizen.anonId,
+    });
+
+    expect(updated.id).toBe(created.id);
   });
 
   it('accepts photo synchronization during edit', async () => {
@@ -356,6 +377,40 @@ describe('IncidentsService', () => {
     expect(created.occurredAt?.toISOString()).toBe('2026-01-10T10:00:00.000Z');
   });
 
+  it('finds incidents for map with default filters', async () => {
+    const citizen = await createCitizen('Laura');
+
+    await service.create(
+      buildIncidentData({
+        citizenId: citizen.id,
+        anonId: citizen.anonId,
+      }),
+    );
+
+    const result = await service.findForMap({
+      north: 10,
+      south: -10,
+      east: 10,
+      west: -10,
+      days: 15,
+    });
+
+    expect(result.length).toBeGreaterThan(0);
+  });
+
+  it('returns empty list for mineOnly filter without citizenId or anonId', async () => {
+    const result = await service.findForMap({
+      north: 10,
+      south: -10,
+      east: 10,
+      west: -10,
+      days: 15,
+      mineOnly: true,
+    });
+
+    expect(result).toEqual([]);
+  });
+
   it('throws for unresolved citizen or invalid criticality', async () => {
     await expect(
       service.create(
@@ -369,14 +424,35 @@ describe('IncidentsService', () => {
     ).rejects.toThrow(NotFoundException);
   });
 
-  it('throws when no photo is provided', async () => {
+  it('allows creating without photo when title and description are provided', async () => {
+    const citizen = await createCitizen('João');
+
+    const incident = await service.create(
+      buildIncidentData({
+        citizenId: citizen.id,
+        anonId: citizen.anonId,
+        fileIds: [],
+      }),
+    );
+
+    expect(incident.id).toBeDefined();
+    expect(incident.title).toBe('Título');
+  });
+
+  it('throws when neither photo nor title/description are provided', async () => {
+    const citizen = await createCitizen('Karina');
+
     await expect(
-      service.create(
-        buildIncidentData({
-          citizenId: 1,
-          fileIds: [],
-        }),
-      ),
+      service.create({
+        latitude: -20.2,
+        longitude: -40.3,
+        deviceDirection: 'Norte',
+        criticality: Criticality.RELATO,
+        citizenId: citizen.id,
+        anonId: citizen.anonId,
+        occurredAt: new Date(),
+        fileIds: [],
+      } as any),
     ).rejects.toThrow(BadRequestException);
   });
 });

@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { IncidentsService, MapFilters, CreateIncidentInput, UpdateIncidentInput } from './incidents.service';
 import { Incident } from './incident.entity';
+import { Criticality } from '../common/lib/criticality';
 import { AuthGuard } from '../common/guards/auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
@@ -35,18 +36,36 @@ export class IncidentsController {
     @Query('south') south: string,
     @Query('east') east: string,
     @Query('west') west: string,
+    @Query('days') days: string,
+    @Query('criticalities') criticalities: string | string[],
+    @Query('pendingOnly') pendingOnly: string,
+    @Query('mineOnly') mineOnly: string,
     @Query('anonId') anonId?: string,
     @CurrentUser('sub') citizenId?: number,
     @CurrentUser('role') role?: string,
   ) {
+    const isAdmin = role === 'admin';
+
+    const parsedCriticalities = (() => {
+      if (!criticalities) return undefined;
+      const items = Array.isArray(criticalities) ? criticalities : criticalities.split(',');
+      return items
+        .map((item) => item.trim())
+        .filter((item) => Object.values(Criticality).includes(item as Criticality)) as Criticality[];
+    })();
+
     const filters: MapFilters = {
       north: Number(north),
       south: Number(south),
       east: Number(east),
       west: Number(west),
+      days: Number(days) || 15,
       anonId,
       citizenId,
-      isAdmin: role === 'admin',
+      isAdmin,
+      criticalities: parsedCriticalities,
+      pendingOnly: pendingOnly === 'true',
+      mineOnly: mineOnly === 'true',
     };
 
     return this.incidentsService.findForMap(filters);

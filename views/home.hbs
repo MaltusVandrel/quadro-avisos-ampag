@@ -22,7 +22,7 @@
       <button class="floating-button" id="openFormButton" title="Nova ocorrência" aria-label="Nova ocorrência">
         <i class="fa-solid fa-triangle-exclamation"></i>
       </button>
-      <button class="floating-button secondary" onclick="alert('Filtro em breve')" title="Filtrar" aria-label="Filtrar">
+      <button class="floating-button secondary" id="openFilterButton" title="Filtrar" aria-label="Filtrar">
         <i class="fa-solid fa-filter"></i>
       </button>
     </div>
@@ -84,7 +84,7 @@
 
           <div id="authPasswordField">
             <label for="authPassword">Senha</label>
-            <input id="authPassword" type="password" placeholder="Senha" required />
+            <input id="authPassword" type="password" placeholder="Senha" />
           </div>
 
           <div id="authRegisterFields" class="hidden">
@@ -193,6 +193,54 @@
       </div>
     </div>
 
+    <div class="modal hidden" id="filterModal">
+      <div class="card">
+        <h2>Filtrar ocorrências</h2>
+        <form id="filterForm">
+          <label for="filterPeriod">Período</label>
+          <select id="filterPeriod">
+            <option value="15">Últimos 15 dias</option>
+            <option value="30">Últimos 30 dias</option>
+            <option value="90">Últimos 90 dias</option>
+            <option value="180">Últimos 6 meses</option>
+            <option value="360">Últimos 1 ano</option>
+          </select>
+
+          <label>Criticidade</label>
+          <div class="filter-criticality-picker criticality-picker" role="group" aria-label="Criticidade">
+            <button type="button" class="criticality-option relato" data-filter-criticality="Relato">
+              <i class="fa-solid fa-comment-dots"></i>
+            </button>
+            <button type="button" class="criticality-option transtorno" data-filter-criticality="Transtorno">
+              <i class="fa-solid fa-bolt"></i>
+            </button>
+            <button type="button" class="criticality-option risco" data-filter-criticality="Risco">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+            </button>
+            <button type="button" class="criticality-option perigo" data-filter-criticality="Perigo">
+              <i class="fa-solid fa-skull-crossbones"></i>
+            </button>
+          </div>
+
+          <div class="checkbox-row hidden" id="filterPendingOnlyRow">
+            <input id="filterPendingOnly" type="checkbox" />
+            <label for="filterPendingOnly">Em aprovação</label>
+          </div>
+
+          <div class="checkbox-row">
+            <input id="filterMineOnly" type="checkbox" />
+            <label for="filterMineOnly">Minhas ocorrências</label>
+          </div>
+
+          <div class="actions">
+            <button type="button" class="btn secondary" id="filterCancelButton">Cancelar</button>
+            <button type="button" class="btn secondary" id="filterResetButton">Limpar</button>
+            <button type="submit" class="btn primary">Aplicar</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <div class="modal hidden" id="incidentModal">
       <div class="card">
         <h2 id="incidentModalTitle">Nova ocorrência</h2>
@@ -282,6 +330,7 @@
           <button type="button" class="btn primary" id="viewApproveButton">Aprovar</button>
           <button type="button" class="btn secondary" id="viewEditButton">Editar</button>
           <button type="button" class="btn secondary" id="viewDeactivateButton">Remover</button>
+          <span class="anonymous-edit-hint hidden" id="anonymousEditHint"><i class="fa-solid fa-circle-info"></i> Cadastre-se para editar esta ocorrência.</span>
         </div>
       </div>
     </div>
@@ -295,6 +344,6 @@
       </button>
     </div>
 
-    <script src="/js/home.js?v=24"></script>
+    <script src="/js/home.js?v=38"></script>
   </body>
 </html>

@@ -1,6 +1,7 @@
 const DEFAULT_CRITICALITY_KEY = 'quadro-avisos-default-criticality';
 const ANONYMOUS_PROFILE_KEY = 'quadro-avisos-anonymous-profile';
 const SESSION_KEY = 'quadro-avisos-session';
+const MAP_FILTERS_KEY = 'quadro-avisos-map-filters';
 const API_BASE_URL = '';
 const defaultCenter = { lat: -27.640099739226315, lng: -48.68046242802495 };
 let map;
@@ -24,6 +25,34 @@ function getDefaultCriticality() {
 
 function saveDefaultCriticality(criticality) {
   localStorage.setItem(DEFAULT_CRITICALITY_KEY, criticality);
+}
+
+function getDefaultMapFilters() {
+  return {
+    days: 15,
+    criticalities: [],
+    pendingOnly: false,
+    mineOnly: false,
+  };
+}
+
+function getMapFilters() {
+  try {
+    const raw = localStorage.getItem(MAP_FILTERS_KEY);
+    if (!raw) return getDefaultMapFilters();
+    const parsed = JSON.parse(raw);
+    return { ...getDefaultMapFilters(), ...parsed };
+  } catch {
+    return getDefaultMapFilters();
+  }
+}
+
+function saveMapFilters(filters) {
+  try {
+    localStorage.setItem(MAP_FILTERS_KEY, JSON.stringify(filters));
+  } catch {
+    // ignore storage errors
+  }
 }
 
 function getSession() {
@@ -313,7 +342,7 @@ function getCriticalityColor(criticality) {
     case 'Relato':
       return '#a88a5a';
     default:
-      return '#2563eb';
+      return '#6b7280';
   }
 }
 
@@ -330,6 +359,7 @@ function updateCriticalitySelection(criticality) {
   }
 
   buttons.forEach((button) => {
+    if (button.closest('#criticalityModal') || button.closest('#filterModal')) return;
     const isActive = button.dataset.criticality === criticality;
     button.classList.toggle('is-active', isActive);
   });
@@ -600,11 +630,15 @@ function isIncidentOwner(incident) {
 }
 
 function canDeactivate(incident) {
-  return isAdmin() || (isIncidentOwner(incident) && !incident.reviewed);
+  return isAdmin() || (!incident.reviewed && isIncidentOwner(incident));
 }
 
 function canEdit(incident) {
-  return isAdmin() || (isIncidentOwner(incident) && !incident.reviewed);
+  return isLoggedIn() && !incident.reviewed && (isAdmin() || isIncidentOwner(incident));
+}
+
+function canShowAnonymousEditHint(incident) {
+  return !isLoggedIn() && !incident.reviewed && isIncidentOwner(incident);
 }
 
 function formatIncidentDate(value) {
@@ -612,10 +646,15 @@ function formatIncidentDate(value) {
 }
 
 function renderViewCarousel() {
+  const carousel = document.getElementById('viewCarousel');
   const img = document.getElementById('viewImage');
   const prevButton = document.getElementById('viewPrevButton');
   const nextButton = document.getElementById('viewNextButton');
   const counter = document.getElementById('viewCounter');
+
+  if (carousel) {
+    carousel.classList.toggle('hidden', currentViewFiles.length === 0);
+  }
 
   if (!img || !counter) return;
 
@@ -639,32 +678,72 @@ function showViewImage(index) {
   renderViewCarousel();
 }
 
-async function openIncidentView(incident) {
+function setIncidentViewContent(incident) {
   const title = document.getElementById('viewTitle');
   const subtitle = document.getElementById('viewSubtitle');
   const description = document.getElementById('viewDescription');
   const card = document.getElementById('incidentViewCard');
-  const adminActions = document.getElementById('viewAdminActions');
-  const approveButton = document.getElementById('viewApproveButton');
-  const editButton = document.getElementById('viewEditButton');
 
-  currentViewIncidentId = incident.id;
+  if (title) {
+    if (incident.title) {
+      title.textContent = incident.title;
+    } else if (currentViewFiles.length > 0) {
+      title.textContent = incident.criticality || 'Relato';
+    } else {
+      title.textContent = 'Ocorrência';
+    }
+  }
 
-  if (title) title.textContent = incident.title || 'Ocorrência';
   if (subtitle) {
     const criticality = incident.criticality || 'Relato';
     const date = formatIncidentDate(incident.occurredAt);
     subtitle.textContent = date ? `${criticality} • ${date}` : criticality;
   }
+
   if (description) {
-    description.textContent = incident.description || 'Sem descrição';
+    if (incident.description) {
+      description.textContent = incident.description;
+      description.style.display = '';
+    } else {
+      description.textContent = '';
+      description.style.display = 'none';
+    }
   }
+
   if (card) {
-    card.style.backgroundColor = getCriticalityColor(incident.criticality);
+    const baseColor = getCriticalityColor(incident.criticality);
+    card.style.backgroundColor = baseColor;
+    card.style.color = `color-mix(in hsl, ${baseColor} 30%, #1F1E1C 70%)`;
   }
+}
+
+async function openIncidentView(incident) {
+  const adminActions = document.getElementById('viewAdminActions');
+  const approveButton = document.getElementById('viewApproveButton');
+  const editButton = document.getElementById('viewEditButton');
+  const deactivateButton = document.getElementById('viewDeactivateButton');
+
+  currentViewIncidentId = incident.id;
+
+  currentViewFiles = [];
+  currentViewIndex = 0;
+
+  try {
+    const files = await api(`/uploads?incidentId=${incident.id}`);
+    currentViewFiles = Array.isArray(files) ? files : [];
+  } catch (error) {
+    console.error('Failed to load incident photos:', error);
+  }
+
+  currentViewIndex = 0;
+  renderViewCarousel();
+  setIncidentViewContent(incident);
 
   if (adminActions) {
     adminActions.classList.toggle('hidden', !canDeactivate(incident));
+  }
+  if (deactivateButton) {
+    deactivateButton.classList.toggle('hidden', !canDeactivate(incident));
   }
   if (approveButton) {
     approveButton.classList.toggle('hidden', !isAdmin() || incident.reviewed);
@@ -673,19 +752,22 @@ async function openIncidentView(incident) {
     editButton.classList.toggle('hidden', !canEdit(incident));
   }
 
-  currentViewFiles = [];
-  currentViewIndex = 0;
-  renderViewCarousel();
-  openModalById('incidentViewModal');
-
-  try {
-    const files = await api(`/uploads?incidentId=${incident.id}`);
-    currentViewFiles = Array.isArray(files) ? files : [];
-    currentViewIndex = 0;
-    renderViewCarousel();
-  } catch (error) {
-    console.error('Failed to load incident photos:', error);
+  const anonymousEditHint = document.getElementById('anonymousEditHint');
+  if (anonymousEditHint) {
+    anonymousEditHint.classList.toggle('hidden', !canShowAnonymousEditHint(incident));
   }
+
+  const baseColor = getCriticalityColor(incident.criticality);
+  const buttonColor = `color-mix(in hsl, ${baseColor} 70%, #000 30%)`;
+  [approveButton, editButton, deactivateButton].forEach((button) => {
+    if (button) {
+      button.style.backgroundColor = buttonColor;
+      button.style.color = '#fff';
+      button.style.borderColor = buttonColor;
+    }
+  });
+
+  openModalById('incidentViewModal');
 }
 
 function closeIncidentView() {
@@ -909,16 +991,29 @@ async function loadVisibleIncidents() {
   const boundsJson = typeof bounds.toJSON === 'function' ? bounds.toJSON() : bounds;
   const { north, south, east, west } = boundsJson;
 
-  
   const profile = getAnonymousProfile();
   const anonId = profile ? profile.id : undefined;
+  const filters = getMapFilters();
 
   const params = new URLSearchParams({
     north: String(north),
     south: String(south),
     east: String(east),
     west: String(west),
+    days: String(filters.days),
   });
+
+  if (filters.criticalities && filters.criticalities.length > 0) {
+    params.append('criticalities', filters.criticalities.join(','));
+  }
+
+  if (filters.pendingOnly) {
+    params.append('pendingOnly', 'true');
+  }
+
+  if (filters.mineOnly) {
+    params.append('mineOnly', 'true');
+  }
 
   if (anonId) {
     params.append('anonId', anonId);
@@ -1169,10 +1264,6 @@ function updateAuthModalMode(mode) {
   document.getElementById('authForgotButton')?.classList.toggle('hidden', isRegister || isReset);
   document.getElementById('authForm').dataset.mode = mode;
 
-  const authPassword = document.getElementById('authPassword');
-  if (authPassword) {
-    authPassword.required = !isReset;
-  }
 }
 
 async function handleAuthSubmit(event) {
@@ -1185,6 +1276,11 @@ async function handleAuthSubmit(event) {
   console.log('[auth] mode:', mode, 'cpf:', cpf);
 
   if (mode === 'register') {
+    if (!password) {
+      alert('Senha é obrigatória.');
+      return;
+    }
+
     const confirmPassword = document.getElementById('authConfirmPassword').value;
     const name = document.getElementById('authName').value.trim();
 
@@ -1211,6 +1307,9 @@ async function handleAuthSubmit(event) {
     try {
       const result = await api('/auth/register', { method: 'POST', body: JSON.stringify(body) });
       setSession({ token: result.token, citizen: result.citizen });
+      localStorage.removeItem(MAP_FILTERS_KEY);
+      window.location.reload();
+      return;
     } catch (error) {
       alert(error.message || 'Erro ao criar conta. Tente novamente.');
       return;
@@ -1249,6 +1348,11 @@ async function handleAuthSubmit(event) {
       return;
     }
   } else {
+    if (!password) {
+      alert('Senha é obrigatória.');
+      return;
+    }
+
     try {
       console.log('[auth] calling /auth/login');
       const result = await api('/auth/login', {
@@ -1257,6 +1361,9 @@ async function handleAuthSubmit(event) {
       });
       console.log('[auth] login success', result);
       setSession({ token: result.token, citizen: result.citizen });
+      localStorage.removeItem(MAP_FILTERS_KEY);
+      window.location.reload();
+      return;
     } catch (error) {
       console.error('[auth] login error:', error);
       alert('Credenciais incorretas ou usuário inexistente.');
@@ -1300,9 +1407,8 @@ async function handleProfileSubmit(event) {
 function handleLogout() {
   api('/auth/logout', { method: 'POST' }).catch(() => null);
   clearSession();
-  closeModalById('confirmLogoutModal');
-  renderSettingsMenu();
-  loadVisibleIncidents();
+  localStorage.removeItem(MAP_FILTERS_KEY);
+  window.location.reload();
 }
 
 function openCriticalityModal() {
@@ -1321,6 +1427,52 @@ function handleCriticalityConfirm() {
     updateCriticalitySelection(criticality);
   }
   closeModalById('criticalityModal');
+}
+
+function openFilterModal() {
+  const filters = getMapFilters();
+  const session = getSession();
+
+  document.getElementById('filterPeriod').value = String(filters.days);
+  document.querySelectorAll('[data-filter-criticality]').forEach((button) => {
+    button.classList.toggle('is-active', filters.criticalities.includes(button.dataset.filterCriticality));
+  });
+  document.getElementById('filterPendingOnly').checked = filters.pendingOnly;
+  document.getElementById('filterMineOnly').checked = filters.mineOnly;
+
+  const pendingOnlyRow = document.getElementById('filterPendingOnlyRow');
+  if (pendingOnlyRow) {
+    pendingOnlyRow.classList.toggle('hidden',session==null || !session?.citizen || session.citizen.role !== 'admin');
+  }
+
+  openModalById('filterModal');
+}
+
+function applyFilters() {
+  const session = getSession();
+  const criticalities = Array.from(document.querySelectorAll('[data-filter-criticality].is-active'))
+    .map((button) => button.dataset.filterCriticality);
+
+  const pendingOnly = document.getElementById('filterPendingOnly').checked;
+  const isAdmin = session?.citizen?.role === 'admin';
+
+  const filters = {
+    days: Number(document.getElementById('filterPeriod').value) || 15,
+    criticalities,
+    pendingOnly: isAdmin ? pendingOnly : false,
+    mineOnly: document.getElementById('filterMineOnly').checked,
+  };
+
+  saveMapFilters(filters);
+  closeModalById('filterModal');
+  loadVisibleIncidents();
+}
+
+function resetFilters() {
+  const defaultFilters = getDefaultMapFilters();
+  saveMapFilters(defaultFilters);
+  closeModalById('filterModal');
+  loadVisibleIncidents();
 }
 
 let lastDeviceDirection = null;
@@ -1555,7 +1707,18 @@ function initAuthAndSettingsListeners() {
   });
 
   document.getElementById('authCancelButton')?.addEventListener('click', () => closeModalById('authModal'));
-  document.getElementById('authForm')?.addEventListener('submit', handleAuthSubmit);
+  document.getElementById('authForm')?.addEventListener('submit', (event) => {
+    console.log('[auth] form submit event fired');
+    handleAuthSubmit(event);
+  });
+  document.getElementById('authSubmitButton')?.addEventListener('click', (event) => {
+    console.log('[auth] submit button clicked');
+    event.preventDefault();
+    const form = document.getElementById('authForm');
+    if (form) {
+      handleAuthSubmit(event);
+    }
+  });
 
   document.getElementById('authCpf')?.addEventListener('input', (event) => {
     event.target.value = formatCpf(event.target.value);
@@ -1569,6 +1732,14 @@ function initAuthAndSettingsListeners() {
 
   document.getElementById('criticalityCancelButton')?.addEventListener('click', () => closeModalById('criticalityModal'));
   document.getElementById('criticalityConfirmButton')?.addEventListener('click', handleCriticalityConfirm);
+
+  document.getElementById('openFilterButton')?.addEventListener('click', openFilterModal);
+  document.getElementById('filterCancelButton')?.addEventListener('click', () => closeModalById('filterModal'));
+  document.getElementById('filterResetButton')?.addEventListener('click', resetFilters);
+  document.getElementById('filterForm')?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    applyFilters();
+  });
 
   document.querySelectorAll('#criticalityModal .criticality-option').forEach((button) => {
     button.addEventListener('click', () => {
@@ -1634,16 +1805,15 @@ async function initMap() {
     loadVisibleIncidents();
   });
 
-  document.querySelectorAll('.criticality-option').forEach((button) => {
+  document.querySelectorAll('#incidentModal .criticality-option[data-criticality]').forEach((button) => {
     button.addEventListener('click', () => {
       updateCriticalitySelection(button.dataset.criticality);
     });
   });
 
-  document.querySelectorAll('.criticality-option').forEach((button) => {
+  document.querySelectorAll('#filterModal .criticality-option[data-filter-criticality]').forEach((button) => {
     button.addEventListener('click', () => {
-      if (button.closest('#criticalityModal')) return;
-      updateCriticalitySelection(button.dataset.criticality);
+      button.classList.toggle('is-active');
     });
   });
 
@@ -1745,13 +1915,26 @@ async function initMap() {
       return;
     }
 
-    if (uploadedFiles.length === 0) {
-      alert('Adicione pelo menos uma foto da ocorrência.');
+    const title = document.getElementById('title').value.trim();
+    const description = document.getElementById('description').value.trim();
+    const hasText = title || description;
+
+    const fileIds = uploadedFiles.map((file) => file.fileId).filter(Boolean);
+    const hasPhoto = fileIds.length > 0;
+
+    if (!hasText && !hasPhoto) {
+      alert('Envie pelo menos uma foto ou preencha título e descrição.');
       return;
     }
 
-    const fileIds = uploadedFiles.map((file) => file.fileId).filter(Boolean);
-    if (fileIds.length === 0) {
+    if (!hasPhoto) {
+      if (!title || !description) {
+        alert('Sem foto, é necessário informar tanto título quanto descrição.');
+        return;
+      }
+    }
+
+    if (uploadedFiles.length > 0 && fileIds.length === 0) {
       alert('O envio das fotos ainda não foi concluído. Aguarde ou tente novamente.');
       return;
     }
